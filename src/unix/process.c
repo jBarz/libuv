@@ -60,12 +60,16 @@ static void uv__chld(uv_signal_t* handle, int signum) {
 
   QUEUE_INIT(&pending);
   loop = handle->loop;
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
 
   h = &loop->process_handles;
   q = QUEUE_HEAD(h);
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
   while (q != h) {
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
     process = QUEUE_DATA(q, uv_process_t, queue);
     q = QUEUE_NEXT(q);
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
 
     do
       pid = waitpid(process->pid, &status, WNOHANG);
@@ -84,10 +88,12 @@ static void uv__chld(uv_signal_t* handle, int signum) {
     QUEUE_REMOVE(&process->queue);
     QUEUE_INSERT_TAIL(&pending, &process->queue);
   }
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
 
   h = &pending;
   q = QUEUE_HEAD(h);
   while (q != h) {
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
     process = QUEUE_DATA(q, uv_process_t, queue);
     q = QUEUE_NEXT(q);
 
@@ -97,15 +103,21 @@ static void uv__chld(uv_signal_t* handle, int signum) {
 
     if (process->exit_cb == NULL)
       continue;
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
 
     exit_status = 0;
-    if (WIFEXITED(process->status))
+    if (WIFEXITED(process->status)){
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
       exit_status = WEXITSTATUS(process->status);
+    }
 
     term_signal = 0;
-    if (WIFSIGNALED(process->status))
+    if (WIFSIGNALED(process->status)){
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
       term_signal = WTERMSIG(process->status);
+    }
 
+    //printf("JBAR uv__child %s:%d\n", __FILE__, __LINE__);
     process->exit_cb(process, exit_status, term_signal);
   }
   assert(QUEUE_EMPTY(&pending));
@@ -295,6 +307,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
     if (use_fd < 0 || use_fd >= fd)
       continue;
     pipes[fd][1] = fcntl(use_fd, F_DUPFD, stdio_count);
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
     if (pipes[fd][1] == -1) {
       uv__write_int(error_fd, -errno);
       _exit(127);
@@ -315,19 +328,28 @@ static void uv__process_child_init(const uv_process_options_t* options,
         use_fd = open("/dev/null", fd == 0 ? O_RDONLY : O_RDWR);
         close_fd = use_fd;
 
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
         if (use_fd == -1) {
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
           uv__write_int(error_fd, -errno);
           _exit(127);
         }
       }
     }
 
-    if (fd == use_fd)
+    if (fd == use_fd){
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
       uv__cloexec(use_fd, 0);
-    else
+    }
+    else{
+  //printf("JBAR in child %s:%d dup2(%d, %d)\n", __FILE__, __LINE__, use_fd, fd);
       fd = dup2(use_fd, fd);
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
+    }
 
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
     if (fd == -1) {
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
       uv__write_int(error_fd, -errno);
       _exit(127);
     }
@@ -339,6 +361,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
       uv__close(close_fd);
   }
 
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
   for (fd = 0; fd < stdio_count; fd++) {
     use_fd = pipes[fd][1];
 
@@ -346,6 +369,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
       uv__close(use_fd);
   }
 
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
   if (options->cwd != NULL && chdir(options->cwd)) {
     uv__write_int(error_fd, -errno);
     _exit(127);
@@ -362,11 +386,13 @@ static void uv__process_child_init(const uv_process_options_t* options,
     SAVE_ERRNO(setgroups(0, NULL));
   }
 
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
   if ((options->flags & UV_PROCESS_SETGID) && setgid(options->gid)) {
     uv__write_int(error_fd, -errno);
     _exit(127);
   }
 
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
   if ((options->flags & UV_PROCESS_SETUID) && setuid(options->uid)) {
     uv__write_int(error_fd, -errno);
     _exit(127);
@@ -374,9 +400,12 @@ static void uv__process_child_init(const uv_process_options_t* options,
 
   if (options->env != NULL) {
     environ = options->env;
+  //printf("JBAR in child %s:%d setting environ %s\n", __FILE__, __LINE__, environ[0]);
   }
 
+  //printf("JBAR in child %s:%d execvp %s %s\n", __FILE__, __LINE__, options->file, options->args[0]);
   execvp(options->file, options->args);
+  //printf("JBAR in child %s:%d\n", __FILE__, __LINE__);
   uv__write_int(error_fd, -errno);
   _exit(127);
 }
@@ -472,6 +501,7 @@ int uv_spawn(uv_loop_t* loop,
     uv__process_child_init(options, stdio_count, pipes, signal_pipe[1]);
     abort();
   }
+
 
   /* Release lock in parent process */
   uv_rwlock_wrunlock(&loop->cloexec_lock);

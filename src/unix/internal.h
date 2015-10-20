@@ -38,6 +38,10 @@
 # include "linux-syscalls.h"
 #endif /* __linux__ */
 
+#if defined(__MVS__)
+# include "os390-syscalls.h"
+#endif /* __linux__ */
+
 #if defined(__sun)
 # include <sys/port.h>
 # include <port.h>
@@ -294,12 +298,13 @@ static const int kFSEventStreamEventFlagItemIsSymlink = 0x00040000;
 #endif /* __ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__ < 1070 */
 
 #endif /* defined(__APPLE__) */
-
+int      printf (const char * __restrict__, ...);
 UV_UNUSED(static void uv__req_init(uv_loop_t* loop,
                                    uv_req_t* req,
                                    uv_req_type type)) {
   req->type = type;
   uv__req_register(loop, req);
+  //printf("JBAR registered request on loop\n");
 }
 #define uv__req_init(loop, req, type) \
   uv__req_init((loop), (uv_req_t*)(req), (type))

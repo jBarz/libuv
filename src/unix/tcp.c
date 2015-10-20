@@ -64,6 +64,7 @@ int uv_tcp_init_ex(uv_loop_t* loop, uv_tcp_t* tcp, unsigned int flags) {
     return -EINVAL;
 
   uv__stream_init(loop, (uv_stream_t*)tcp, UV_TCP);
+  //printf("JBAR %s:%d tcp->type=%d\n", __FILE__, __LINE__, tcp->type);
 
   /* If anything fails beyond this point we need to remove the handle from
    * the handle queue, since it was added by uv__handle_init in uv_stream_init.
@@ -132,6 +133,8 @@ int uv__tcp_bind(uv_tcp_t* tcp,
 
   if (addr->sa_family == AF_INET6)
     tcp->flags |= UV_HANDLE_IPV6;
+
+  tcp->is_bound = 1;
 
   return 0;
 }
@@ -266,10 +269,34 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   if (err)
     return err;
 
+#ifdef __MVS__
+  /* on zOS the listen call does not bind automatically if the socket is unbound
+  ** Hence the manual binding to an arbitrary port is required to be done manually */
+
+  errno = 0;
+  if (tcp->is_bound != 1)
+  {
+    struct sockaddr_in saddr;
+    unsigned namelen = sizeof saddr;
+    saddr.sin_port=0;
+    saddr.sin_addr.s_addr = 0;
+    saddr.sin_family = AF_INET;
+    if( bind(tcp->io_watcher.fd, (struct sockaddr*)&saddr, namelen)) {
+    //printf("JBAR binding arbitrary port to fd=%d\n", tcp->io_watcher.fd);
+      if (errno == EAFNOSUPPORT)
+        /* OSX, other BSDs and SunoS fail with EAFNOSUPPORT when binding a
+        * socket created with AF_INET to an AF_INET6 address or vice versa. */
+        return -EINVAL;
+      return -errno;
+    }
+    tcp->is_bound = 1;
+  }
+#endif
+
   if (listen(tcp->io_watcher.fd, backlog))
     return -errno;
-
   tcp->connection_cb = cb;
+  //printf("JBAR tcp listening on fd=%d\n", tcp->io_watcher.fd);
 
   /* Start listening for connections. */
   tcp->io_watcher.cb = uv__server_io;

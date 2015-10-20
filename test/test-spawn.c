@@ -1503,6 +1503,8 @@ TEST_IMPL(spawn_reads_child_path) {
    */
 #if defined(__APPLE__)
   static const char dyld_path_var[] = "DYLD_LIBRARY_PATH";
+#elif defined __MVS__
+  static const char dyld_path_var[] = "LIBPATH";
 #else
   static const char dyld_path_var[] = "LD_LIBRARY_PATH";
 #endif
@@ -1510,12 +1512,17 @@ TEST_IMPL(spawn_reads_child_path) {
   /* Set up the process, but make sure that the file to run is relative and */
   /* requires a lookup into PATH */
   init_process_options("spawn_helper1", exit_cb);
+  printf("JBAR exe file=%s\n",  exepath);
 
   /* Set up the PATH env variable */
   for (len = strlen(exepath);
        exepath[len - 1] != '/' && exepath[len - 1] != '\\';
        len--);
+#ifdef __MVS__
+  strcpy(file, exepath);
+#else
   strcpy(file, exepath + len);
+#endif
   exepath[len] = 0;
   strcpy(path, "PATH=");
   strcpy(path + 5, exepath);
@@ -1532,6 +1539,7 @@ TEST_IMPL(spawn_reads_child_path) {
 
   options.file = file;
   options.args[0] = file;
+  printf("JBAR exe file=%s\n",  options.file);
   options.env = env;
 
   r = uv_spawn(uv_default_loop(), &process, &options);

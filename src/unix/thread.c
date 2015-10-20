@@ -446,6 +446,13 @@ int uv_cond_init(uv_cond_t* cond) {
   return -pthread_cond_init(cond, NULL);
 }
 
+#elif defined __MVS__
+
+int uv_cond_init(uv_cond_t* cond) {
+  return -pthread_cond_init(cond, NULL);
+}
+
+
 #else /* !(defined(__APPLE__) && defined(__MACH__)) */
 
 int uv_cond_init(uv_cond_t* cond) {

@@ -128,6 +128,8 @@ static void uv__async_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     abort();
   }
 
+
+
   wa = container_of(w, struct uv__async, io_watcher);
 
 #if defined(__linux__)

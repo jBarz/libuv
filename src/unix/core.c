@@ -161,6 +161,7 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
     return;
 
   default:
+    //printf("JBAR handle->type=%d\n", handle->type);
     assert(0);
   }
 
@@ -347,6 +348,9 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     if ((mode == UV_RUN_ONCE && !ran_pending) || mode == UV_RUN_DEFAULT)
       timeout = uv_backend_timeout(loop);
 
+    /*JBAR*/
+    //uv_print_all_handles(loop);
+    /* JBAR */
     uv__io_poll(loop, timeout);
     uv__run_check(loop);
     uv__run_closing_handles(loop);
@@ -423,6 +427,7 @@ int uv__socket(int domain, int type, int protocol) {
   }
 #endif
 
+  ////printf("JBAR %s:%d new socket = %d\n", __FILE__,__LINE__,sockfd);
   return sockfd;
 }
 
@@ -489,6 +494,7 @@ skip:
       return err;
     }
 
+  ////printf("JBAR %s:%d server fd=%d now created socket fd=%d\n", __FILE__,__LINE__,sockfd,peerfd);
     return peerfd;
   }
 }
@@ -829,6 +835,7 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   w->pevents |= events;
   maybe_resize(loop, w->fd + 1);
 
+  ////printf("JBAR uv__io_start %s:%d %d\n", __FILE__,__LINE__,w->fd);
 #if !defined(__sun)
   /* The event ports backend needs to rearm all file descriptors on each and
    * every tick of the event loop but the other backends allow us to
@@ -843,8 +850,11 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   }
 #endif
 
-  if (QUEUE_EMPTY(&w->watcher_queue))
+  if (QUEUE_EMPTY(&w->watcher_queue)){
+     ////printf("JBAR adding handle for fd %d on loop watcher_queue\n", w->fd);
     QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
+  }
+
 
   if (loop->watchers[w->fd] == NULL) {
     loop->watchers[w->fd] = w;
@@ -857,6 +867,7 @@ void uv__io_stop(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(0 == (events & ~(POLLIN | POLLOUT | UV__POLLRDHUP)));
   assert(0 != events);
 
+  ////printf("JBAR uv__io_stop %s:%d %d\n", __FILE__,__LINE__,w->fd);
   if (w->fd == -1)
     return;
 

@@ -69,6 +69,9 @@ int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
   memset(&saddr, 0, sizeof saddr);
   strncpy(saddr.sun_path, pipe_fname, sizeof(saddr.sun_path) - 1);
   saddr.sun_path[sizeof(saddr.sun_path) - 1] = '\0';
+#ifdef __MVS__
+  saddr.sun_len = strlen(saddr.sun_path);
+#endif
   saddr.sun_family = AF_UNIX;
 
   if (bind(sockfd, (struct sockaddr*)&saddr, sizeof saddr)) {
@@ -96,6 +99,11 @@ err_socket:
 int uv_pipe_listen(uv_pipe_t* handle, int backlog, uv_connection_cb cb) {
   if (uv__stream_fd(handle) == -1)
     return -EINVAL;
+
+#ifdef __MVS__
+  /*on zOS, backlog=0 has undefined behaviour */
+  backlog = backlog==0 ? 1 : backlog;
+#endif
 
   if (listen(uv__stream_fd(handle), backlog))
     return -errno;
@@ -164,6 +172,9 @@ void uv_pipe_connect(uv_connect_t* req,
   memset(&saddr, 0, sizeof saddr);
   strncpy(saddr.sun_path, name, sizeof(saddr.sun_path) - 1);
   saddr.sun_path[sizeof(saddr.sun_path) - 1] = '\0';
+#ifdef __MVS__
+  saddr.sun_len = strlen(saddr.sun_path);
+#endif
   saddr.sun_family = AF_UNIX;
 
   do {
@@ -176,6 +187,7 @@ void uv_pipe_connect(uv_connect_t* req,
     err = -errno;
     goto out;
   }
+  //printf("JBAR sent connection request to pipe\n");
 
   err = 0;
   if (new_sock) {
@@ -197,8 +209,9 @@ out:
   QUEUE_INIT(&req->queue);
 
   /* Force callback to run on next tick in case of error. */
-  if (err)
+  if (err){
     uv__io_feed(handle->loop, &handle->io_watcher);
+  }
 
 }
 

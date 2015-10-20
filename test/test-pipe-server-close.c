@@ -70,6 +70,7 @@ TEST_IMPL(pipe_server_close) {
   r = uv_pipe_init(loop, &pipe_server, 0);
   ASSERT(r == 0);
 
+
   r = uv_pipe_bind(&pipe_server, TEST_PIPENAME);
   ASSERT(r == 0);
 

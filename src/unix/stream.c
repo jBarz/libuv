@@ -103,7 +103,6 @@ void uv__stream_init(uv_loop_t* loop,
 #endif /* defined(__APPLE_) */
 
   uv__io_init(&stream->io_watcher, uv__stream_io, -1);
-  //printf("JBAR uv__stream_init type=%d stream->type=%d\n", type, ((uv_handle_t*)stream)->type);
 }
 
 
@@ -529,10 +528,8 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       return;
 #endif /* defined(UV_HAVE_KQUEUE) */
 
-    ////printf("JBAR accepting connection %s:%d\n", __FILE__, __LINE__);
     err = uv__accept(uv__stream_fd(stream));
     if (err < 0) {
-    ////printf("JBAR accepting connection error %s:%d\n", __FILE__, __LINE__);
       if (err == -EAGAIN || err == -EWOULDBLOCK)
         return;  /* Not an error. */
 
@@ -561,7 +558,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 
     if (stream->type == UV_TCP && (stream->flags & UV_TCP_SINGLE_ACCEPT)) {
       /* Give other processes a chance to accept connections. */
-    ////printf("JBAR accepting connection %s:%d\n", __FILE__, __LINE__);
       struct timespec timeout = { 0, 1 };
       usleep(1);
     }
@@ -577,15 +573,12 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
 
   assert(server->loop == client->loop);
 
-  ////printf("JBAR uv_accept %s:%d\n", __FILE__, __LINE__);
   if (server->accepted_fd == -1)
     return -EAGAIN;
 
-  ////printf("JBAR uv_accept %s:%d\n", __FILE__, __LINE__);
   switch (client->type) {
     case UV_NAMED_PIPE:
     case UV_TCP:
-        //printf("JBAR accepting tcp\n");
       err = uv__stream_open(client,
                             server->accepted_fd,
                             UV_STREAM_READABLE | UV_STREAM_WRITABLE);
@@ -594,6 +587,10 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
         uv__close(server->accepted_fd);
         goto done;
       }
+#ifdef __MVS__ 
+      if(client->type == UV_TCP)
+	      ((uv_tcp_t*)client)->is_bound = 1;
+#endif
       break;
 
     case UV_UDP:
@@ -1244,7 +1241,6 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
 
 
 static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
-    ////printf("JBAR in uv__stream_io\n");
   uv_stream_t* stream;
 
   stream = container_of(w, uv_stream_t, io_watcher);
@@ -1305,7 +1301,6 @@ static void uv__stream_connect(uv_stream_t* stream) {
   int error;
   uv_connect_t* req = stream->connect_req;
   socklen_t errorsize = sizeof(int);
-  ////printf("JBAR uv__stream_connect %s:%d\n", __FILE__, __LINE__);
 
   assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE);
   assert(req);

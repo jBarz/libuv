@@ -47,13 +47,9 @@ static void close_cb(uv_handle_t* handle) {
 }
 
 void timer_cb(uv_timer_t* handle) {
-    printf("JBAR %s:%d\n", __FILE__, __LINE__);
   uv_close((uv_handle_t*) &client, close_cb);
-    printf("JBAR %s:%d\n", __FILE__, __LINE__);
   uv_close((uv_handle_t*) &server, close_cb);
-    printf("JBAR %s:%d\n", __FILE__, __LINE__);
   uv_close((uv_handle_t*) &incoming, close_cb);
-    printf("JBAR %s:%d\n", __FILE__, __LINE__);
 }
 
 void write_cb(uv_write_t* req, int status) {

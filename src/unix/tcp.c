@@ -115,13 +115,18 @@ int uv__tcp_bind(uv_tcp_t* tcp,
                    IPV6_V6ONLY,
                    &on,
                    sizeof on) == -1) {
+#ifdef __MVS__
+// bug in zOS returning setting the wrong error code
+      return UV_EINVAL;
+#endif
       return -errno;
     }
   }
 #endif
 
   errno = 0;
-  if (bind(tcp->io_watcher.fd, addr, addrlen) && errno != EADDRINUSE) {
+  int jbar=0;
+  if (jbar = bind(tcp->io_watcher.fd, addr, addrlen) && errno != EADDRINUSE) {
     if (errno == EAFNOSUPPORT)
       /* OSX, other BSDs and SunoS fail with EAFNOSUPPORT when binding a
        * socket created with AF_INET to an AF_INET6 address or vice versa. */

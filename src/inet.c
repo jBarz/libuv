@@ -38,6 +38,7 @@ static int inet_pton6(const char *src, unsigned char *dst);
 
 
 int uv_inet_ntop(int af, const void* src, char* dst, size_t size) {
+
   switch (af) {
   case AF_INET:
     return (inet_ntop4(src, dst, size));
@@ -155,6 +156,8 @@ static int inet_ntop6(const unsigned char *src, char *dst, size_t size) {
 
 
 int uv_inet_pton(int af, const char* src, void* dst) {
+
+
   if (src == NULL || dst == NULL)
     return UV_EINVAL;
 
@@ -307,3 +310,4 @@ static int inet_pton6(const char *src, unsigned char *dst) {
   memcpy(dst, tmp, sizeof tmp);
   return 0;
 }
+

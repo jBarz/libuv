@@ -64,23 +64,19 @@ static void on_connection(uv_stream_t* server, int status) {
   uv_tcp_t* conn;
   int r;
 
-  printf("JBAR on_connection %s:%d\n", __FILE__, __LINE__);
   if (!local_conn_accepted) {
     /* Accept the connection and close it.  Also and close the server. */
     ASSERT(status == 0);
     ASSERT((uv_stream_t*)&tcp_server == server);
 
-  printf("JBAR on_connection %s:%d\n", __FILE__, __LINE__);
     conn = malloc(sizeof(*conn));
     ASSERT(conn);
     r = uv_tcp_init(server->loop, conn);
     ASSERT(r == 0);
 
-  printf("JBAR on_connection %s:%d\n", __FILE__, __LINE__);
     r = uv_accept(server, (uv_stream_t*)conn);
     ASSERT(r == 0);
 
-  printf("JBAR on_connection %s:%d\n", __FILE__, __LINE__);
     uv_close((uv_handle_t*)conn, close_server_conn_cb);
     uv_close((uv_handle_t*)server, NULL);
     local_conn_accepted = 1;

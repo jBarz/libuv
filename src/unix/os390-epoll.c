@@ -2,6 +2,9 @@
 #include <poll.h>
 #include <errno.h>
 
+int	_number_of_epolls;
+struct _epoll_list* _global_epoll_list[MAX_EPOLL_INSTANCES];
+
 static int _removefd(struct _epoll_list *lst, int fd)
 {
         int deletion_point = lst->size;                         
@@ -43,7 +46,9 @@ static int _doesExist(struct _epoll_list *lst, int fd, int *index)
 
 int epoll_create1(int flags)
 {
-    return (unsigned)(void*)malloc(sizeof(struct _epoll_list) * MAX_ITEMS_PER_EPOLL); 
+    struct _epoll_list* p = (void*)malloc(sizeof(struct _epoll_list) * MAX_ITEMS_PER_EPOLL);
+    _global_epoll_list[_number_of_epolls++] = p;
+    return (unsigned)p; 
 }
 
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
@@ -149,4 +154,21 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
     }
 
     return reventcount;
+}
+
+int epoll_file_close(int fd)
+{
+	//printf("log: %d removing fd=%d\n", __LINE__, fd);
+	for( int i = 0; i < _number_of_epolls; ++i )
+	{
+	//printf("log: %d removing fd=%d\n", __LINE__, fd);
+		struct _epoll_list *lst = _global_epoll_list[i];
+		int index;
+		if(_doesExist(lst, fd, &index) )
+		{
+		//printf("log: really removing fd=%d\n", fd);
+			_removefd(lst, fd);
+		}
+	}
+	return 0;
 }

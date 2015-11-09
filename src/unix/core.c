@@ -74,8 +74,9 @@
 # include <dlfcn.h>  /* for dlsym */
 #endif
 
-#if defined(__MVS__)
+#ifdef __MVS__
 #include <sys/ioctl.h>
+#include <src/unix/os390-epoll.h>
 #endif
 
 static int uv__run_pending(uv_loop_t* loop);
@@ -427,7 +428,6 @@ int uv__socket(int domain, int type, int protocol) {
   }
 #endif
 
-  ////printf("JBAR %s:%d new socket = %d\n", __FILE__,__LINE__,sockfd);
   return sockfd;
 }
 
@@ -507,6 +507,10 @@ int uv__close_nocheckstdio(int fd) {
   assert(fd > -1);  /* Catch uninitialized io_watcher.fd bugs. */
 
   saved_errno = errno;
+  
+ #ifdef __MVS__
+  epoll_file_close(fd);
+#endif 
   rc = close(fd);
   if (rc == -1) {
     rc = -errno;

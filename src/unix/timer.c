@@ -80,10 +80,12 @@ int uv_timer_start(uv_timer_t* handle,
   clamped_timeout = handle->loop->time + timeout;
   if (clamped_timeout < timeout)
     clamped_timeout = (uint64_t) -1;
+//printf("JBAR initial clamped_timeout=%llu timeout=%llu\n", clamped_timeout, timeout);
 
   handle->timer_cb = cb;
   handle->timeout = clamped_timeout;
   handle->repeat = repeat;
+//printf("JBAR initial timeout=%llu \n", handle->timeout);
   /* start_id is the second index to be compared in uv__timer_cmp() */
   handle->start_id = handle->loop->timer_counter++;
 
@@ -168,6 +170,7 @@ void uv__run_timers(uv_loop_t* loop) {
       break;
 
     handle = container_of(heap_node, uv_timer_t, heap_node);
+//printf("JBAR status timeout=%llu loop=%llu\n", handle->timeout, loop->time);
     if (handle->timeout > loop->time)
       break;
 

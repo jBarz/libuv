@@ -1512,7 +1512,6 @@ TEST_IMPL(spawn_reads_child_path) {
   /* Set up the process, but make sure that the file to run is relative and */
   /* requires a lookup into PATH */
   init_process_options("spawn_helper1", exit_cb);
-  printf("JBAR exe file=%s\n",  exepath);
 
   /* Set up the PATH env variable */
   for (len = strlen(exepath);
@@ -1539,7 +1538,6 @@ TEST_IMPL(spawn_reads_child_path) {
 
   options.file = file;
   options.args[0] = file;
-  printf("JBAR exe file=%s\n",  options.file);
   options.env = env;
 
   r = uv_spawn(uv_default_loop(), &process, &options);

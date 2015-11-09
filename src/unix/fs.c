@@ -78,6 +78,7 @@
   do {                                                                        \
     assert(path != NULL);                                                     \
     if (cb == NULL) {                                                         \
+      printf("JBAR setting path=%s\n", path);                                                       \
       req->path = path;                                                       \
     } else {                                                                  \
       req->path = uv__strdup(path);                                           \
@@ -119,6 +120,7 @@
     }                                                                         \
     else {                                                                    \
       uv__fs_work(&req->work_req);                                            \
+printf("JBAR req->result=%d\n", req->result);					\
       return req->result;                                                     \
     }                                                                         \
   }                                                                           \
@@ -195,7 +197,8 @@ skip:
     || defined(__FreeBSD__)                                                   \
     || defined(__NetBSD__)                                                    \
     || defined(__OpenBSD__)                                                   \
-    || defined(__sun)
+    || defined(__sun)    	                                              \
+    || defined(__MVS__)
   struct timeval tv[2];
   tv[0].tv_sec  = req->atime;
   tv[0].tv_usec = (uint64_t)(req->atime * 1000000) % 1000000;
@@ -203,6 +206,9 @@ skip:
   tv[1].tv_usec = (uint64_t)(req->mtime * 1000000) % 1000000;
 # if defined(__sun)
   return futimesat(req->file, NULL, tv);
+#elif defined(__MVS__)
+printf("JBAR utime filepath = %s\n", req->path);
+  return utime(req->path, tv);
 # else
   return futimes(req->file, tv);
 # endif
@@ -1077,8 +1083,16 @@ int uv_fs_chown(uv_loop_t* loop,
                 uv_fs_cb cb) {
   INIT(CHOWN);
   PATH;
+#ifdef __MVS__
+  struct stat info;
+  if (uid == -1 || gid == -1)
+    stat(path, &info);
+  req->uid = uid == -1 ? info.st_uid : uid;
+  req->gid = gid == -1 ? info.st_gid : gid;
+#else
   req->uid = uid;
   req->gid = gid;
+#endif
   POST;
 }
 

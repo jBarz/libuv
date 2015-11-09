@@ -112,6 +112,11 @@ static void read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
 
   /* Close server, so no one will connect to it */
   uv_close((uv_handle_t*) &tcp_server, close_cb);
+
+#ifdef __MVS__
+  /* Give the OS time to close server fully */
+  sleep(1);
+#endif
 }
 
 static void connection_cb(uv_stream_t* server, int status) {

@@ -216,7 +216,7 @@ static int invokesiv1v2(siv1v2 *info)
 
 	if (CSRSIC == NULL)
 	{
-		printf("ERROR: fetch failed\n");
+		//printf("ERROR: fetch failed\n");
 		return 0;
 	}
 	else
@@ -640,6 +640,7 @@ void uv_free_interface_addresses(uv_interface_address_t* addresses,
 }
 
 void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
+//printf("JBAR invalidating fd=%d\n", fd);
 	struct uv__epoll_event* events;
 	struct uv__epoll_event dummy;
 	uintptr_t i;
@@ -662,10 +663,6 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
 	 * We pass in a dummy epoll_event, to work around a bug in old kernels.
 	 */
 	if (loop->backend_fd >= 0) {
-		/* Work around a bug in kernels 3.10 to 3.19 where passing a struct that
-		 * has the EPOLLWAKEUP flag set generates spurious audit syslog warnings.
-		 */
-		memset(&dummy, 0, sizeof(dummy));
 		uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, &dummy);
 	}
 }
@@ -716,7 +713,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 		e.events = w->pevents;
 		e.data = w->fd;
 
-		//printf("JBAR executing watcher_queue fd=%d\n", e.data);
+		////printf("JBAR executing watcher_queue fd=%d\n", e.data);
 
 		if (w->events == 0)
 			op = UV__EPOLL_CTL_ADD;
@@ -788,6 +785,9 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 		 * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
 		 * operating system didn't reschedule our process while in the syscall.
 		 */
+#ifdef __MVS__
+		base = loop->time;
+#endif
 		SAVE_ERRNO(uv__update_time(loop));
 
 		if (nfds == 0) {
@@ -797,6 +797,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 			if (timeout > 0)
 				continue;
 
+//printf("JBAR: %s:%d exiting io_poll\n", __FILE__, __LINE__);
 			return;
 		}
 
@@ -814,7 +815,10 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				continue;
 
 			if (timeout == 0)
+{
+//printf("JBAR: %s:%d exiting io_poll\n", __FILE__, __LINE__);
 				return;
+}
 
 			/* Interrupted by a signal. Update timeout and poll again. */
 			goto update_timeout;
@@ -887,11 +891,15 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				timeout = 0;
 				continue;
 			}
+//printf("JBAR: %s:%d exiting io_poll\n", __FILE__, __LINE__);
 			return;
 		}
 
 		if (timeout == 0)
+{
+//printf("JBAR: %s:%d exiting io_poll\n", __FILE__, __LINE__);
 			return;
+}
 
 		if (timeout == -1)
 			continue;
@@ -899,9 +907,13 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 update_timeout:
 		assert(timeout > 0);
 
+//printf("JBAR: %s:%d exiting io_poll after %llu before %llu real_timeout %d\n", __FILE__, __LINE__, loop->time, base, real_timeout);
 		real_timeout -= (loop->time - base);
 		if (real_timeout <= 0)
+{
+//printf("JBAR: %s:%d exiting io_poll after %llu before %llu real_timeout %d\n", __FILE__, __LINE__, loop->time, base, real_timeout);
 			return;
+}
 
 		timeout = real_timeout;
 	}

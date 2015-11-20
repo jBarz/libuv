@@ -669,6 +669,7 @@ static int uv__setsockopt(uv_udp_t* handle,
                    option4,
                    val,
                    size);
+
   if (r)
     return -errno;
 
@@ -717,18 +718,22 @@ int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
  * so hardcode the size of these options on this platform,
  * and use the general uv__setsockopt_maybe_char call on other platforms.
  */
-#if defined(__sun) || defined(_AIX) || defined(__OpenBSD__) || defined __MVS__
+#if defined(__sun) || defined(_AIX) || defined(__OpenBSD__)
   return uv__setsockopt(handle,
                         IP_TTL,
                         IPV6_UNICAST_HOPS,
                         &ttl,
                         sizeof(ttl));
-#endif /* defined(__sun) || defined(_AIX) || defined (__OpenBSD__) */
+#elif defined(__MVS__) /* defined(__sun) || defined(_AIX) || defined (__OpenBSD__) */
+/* zOS does not support setting ttl for IPv4 */
+  return 0;
+#else
 
   return uv__setsockopt_maybe_char(handle,
                                    IP_TTL,
                                    IPV6_UNICAST_HOPS,
                                    ttl);
+#endif
 }
 
 

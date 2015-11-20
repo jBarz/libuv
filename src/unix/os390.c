@@ -640,7 +640,6 @@ void uv_free_interface_addresses(uv_interface_address_t* addresses,
 }
 
 void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
-//printf("JBAR invalidating fd=%d\n", fd);
 	struct uv__epoll_event* events;
 	struct uv__epoll_event dummy;
 	uintptr_t i;
@@ -713,7 +712,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 		e.events = w->pevents;
 		e.data = w->fd;
 
-		////printf("JBAR executing watcher_queue fd=%d\n", e.data);
 
 		if (w->events == 0)
 			op = UV__EPOLL_CTL_ADD;
@@ -797,7 +795,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 			if (timeout > 0)
 				continue;
 
-//printf("JBAR: %s:%d exiting io_poll\n", __FILE__, __LINE__);
 			return;
 		}
 
@@ -816,7 +813,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
 			if (timeout == 0)
 {
-//printf("JBAR: %s:%d exiting io_poll\n", __FILE__, __LINE__);
 				return;
 }
 
@@ -891,13 +887,11 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				timeout = 0;
 				continue;
 			}
-//printf("JBAR: %s:%d exiting io_poll\n", __FILE__, __LINE__);
 			return;
 		}
 
 		if (timeout == 0)
 {
-//printf("JBAR: %s:%d exiting io_poll\n", __FILE__, __LINE__);
 			return;
 }
 
@@ -907,11 +901,9 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 update_timeout:
 		assert(timeout > 0);
 
-//printf("JBAR: %s:%d exiting io_poll after %llu before %llu real_timeout %d\n", __FILE__, __LINE__, loop->time, base, real_timeout);
 		real_timeout -= (loop->time - base);
 		if (real_timeout <= 0)
 {
-//printf("JBAR: %s:%d exiting io_poll after %llu before %llu real_timeout %d\n", __FILE__, __LINE__, loop->time, base, real_timeout);
 			return;
 }
 

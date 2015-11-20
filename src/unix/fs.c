@@ -37,6 +37,9 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#if defined (__MVS__)
+#define _OPEN_SYS_FILE_EXT 1
+#endif
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/uio.h>
@@ -78,7 +81,6 @@
   do {                                                                        \
     assert(path != NULL);                                                     \
     if (cb == NULL) {                                                         \
-      printf("JBAR setting path=%s\n", path);                                                       \
       req->path = path;                                                       \
     } else {                                                                  \
       req->path = uv__strdup(path);                                           \
@@ -120,7 +122,6 @@
     }                                                                         \
     else {                                                                    \
       uv__fs_work(&req->work_req);                                            \
-printf("JBAR req->result=%d\n", req->result);					\
       return req->result;                                                     \
     }                                                                         \
   }                                                                           \
@@ -207,8 +208,13 @@ skip:
 # if defined(__sun)
   return futimesat(req->file, NULL, tv);
 #elif defined(__MVS__)
-printf("JBAR utime filepath = %s\n", req->path);
-  return utime(req->path, tv);
+  attrib_t atr;
+  memset(&atr, 0, sizeof(atr));
+  atr.att_mtimechg = 1;
+  atr.att_atimechg = 1;
+  atr.att_mtime = req->mtime;
+  atr.att_atime = req->atime;
+  return __fchattr(req->file, &atr, sizeof(atr));
 # else
   return futimes(req->file, tv);
 # endif
@@ -227,9 +233,17 @@ printf("JBAR utime filepath = %s\n", req->path);
 
 
 static ssize_t uv__fs_mkdtemp(uv_fs_t* req) {
+#if defined(__MVS__)
+  char* c = mktemp((char*)req->path);
+  remove(c);
+  mkdir(c, S_IRWXU);
+  req->path = c;
+  return 0;
+#else
   char* c = tempnam("/tmp", (char*)req->path);
   mkdir(c, S_IRWXU);
   return c;
+#endif
 }
 
 
@@ -1124,8 +1138,16 @@ int uv_fs_fchown(uv_loop_t* loop,
                  uv_fs_cb cb) {
   INIT(FCHOWN);
   req->file = file;
+#ifdef __MVS__
+  struct stat info;
+  if (uid == -1 || gid == -1)
+    fstat(file, &info);
+  req->uid = uid == -1 ? info.st_uid : uid;
+  req->gid = gid == -1 ? info.st_gid : gid;
+#else
   req->uid = uid;
   req->gid = gid;
+#endif
   POST;
 }
 

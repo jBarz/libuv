@@ -72,8 +72,13 @@ typedef struct {
 #define BENCHMARK_DECLARE(name)                     \
   int run_benchmark_##name(void);
 
+#if defined(__MVS__)
+#define BENCHMARK_ENTRY(name)                       \
+    { #name, #name, &run_benchmark_##name, 0, 0, 600000 },
+#else
 #define BENCHMARK_ENTRY(name)                       \
     { #name, #name, &run_benchmark_##name, 0, 0, 60000 },
+#endif
 
 #define HELPER_DECLARE(name)                        \
   int run_helper_##name(void);

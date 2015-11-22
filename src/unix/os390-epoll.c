@@ -1,5 +1,4 @@
 #include "os390-syscalls.h"
-#include <poll.h>
 #include <errno.h>
 
 int	_number_of_epolls;
@@ -10,7 +9,7 @@ static int _removefd(struct _epoll_list *lst, int fd)
         int deletion_point = lst->size;                         
         for (int i = 0; i < lst->size; ++i)                     
         {                                                                  
-            if(lst->fds[i] == fd)                                            
+            if(lst->items[i].fd == fd)                                            
             {                                                              
                 deletion_point = i;                                        
                 break;                                                     
@@ -21,7 +20,7 @@ static int _removefd(struct _epoll_list *lst, int fd)
         {                                                                  
             for (int i = deletion_point; i < lst->size; ++i)    
             {                                                              
-                lst->fds[i] = lst->fds[i+1];                                         
+                lst->items[i] = lst->items[i+1];
             }                                                              
             --(lst->size);                                        
             return 1;
@@ -35,13 +34,36 @@ static int _doesExist(struct _epoll_list *lst, int fd, int *index)
 
         for (int i = 0; i < lst->size; ++i)                     
         {                                                                  
-            if(lst->fds[i] == fd)                                            
+            if(lst->items[i].fd == fd)                                            
             {
                 *index=i;
                 return 1;
             }
         }                                                                  
         return 0;
+}
+
+static void _modify(struct _epoll_list *lst, int index, struct epoll_event events)
+{
+	struct pollfd *i = &lst->items[index];
+        if(events.events & EPOLLIN)
+            i->events |= POLLIN; 
+        if(events.events & EPOLLOUT)
+            i->events |= POLLOUT; 
+        if(events.events & EPOLLHUP)
+            i->events |= POLLHUP; 
+    //printf("log: events = %d\n", i->events);
+
+}
+
+static int _append(struct _epoll_list *lst, int fd, struct epoll_event events)
+{
+	if (lst->size == MAX_ITEMS_PER_EPOLL)
+		return ENOMEM;
+	lst->items[lst->size].fd = fd;
+	_modify(lst, lst->size, events); 
+	++lst->size;
+	return 0;
 }
 
 int epoll_create1(int flags)
@@ -71,20 +93,19 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
             return -1;
         }
         //printf("log: adding fd %d\n", fd);
-        lst->fds[lst->size] = fd;
-        lst->epollev[lst->size++] = *event;
+	return _append(lst, fd, *event);
     }
     else if(op == EPOLL_CTL_MOD)
     {
         int index;
         if( !_doesExist(lst, fd, &index) )
         {
-            //printf("log: will not add fd %d, already exists\n", fd);
+            //printf("log: does not exist fd=%d \n", fd);
             errno = ENOENT;
             return -1;
         }
-        //printf("log: adding fd %d\n", fd);
-        lst->epollev[index] = *event;
+        //printf("log: modifying fd %d\n", fd);
+	_modify(lst, index, *event);
     }
     else 
     {
@@ -98,27 +119,16 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
     struct _epoll_list *lst = (struct _epoll_list*)epfd;
 
-    struct pollfd pfds[lst->size];
-    for (int i = 0; i < lst->size; ++i)                     
-    {
-        pfds[i].fd = lst->fds[i];
-        pfds[i].events = 0;
-        if(lst->epollev[i].events & EPOLLIN)
-            pfds[i].events |= POLLIN; 
-        if(lst->epollev[i].events & EPOLLOUT)
-            pfds[i].events |= POLLOUT; 
-        if(lst->epollev[i].events & EPOLLHUP)
-            pfds[i].events |= POLLHUP; 
-        //printf("log: added fd %d:%d for polling\n", lst->fds[i], pfds[i].events);
-    }
-    
     //printf("log: poll args %d, %d \n", lst->size, timeout);
+    struct pollfd *pfds = lst->items;
+    //for (int i = 0; i < lst->size && i < maxevents; ++i)                     
+        //printf("log: fd=%d events=%d\n", pfds[i].fd, pfds[i].events);
     int returnval = poll( pfds, lst->size, timeout );
+    //printf("log: poll args %d, %d returns %d errno %d\n", lst->size, timeout, returnval, errno);
     if(returnval == -1)
         return returnval;
     else
         returnval = _NFDS(returnval);
-    //printf("log: poll args %d, %d returns %d errno %d\n", lst->size, timeout, returnval, errno);
 
     int reventcount=0;
     for (int i = 0; i < lst->size && i < maxevents; ++i)                     

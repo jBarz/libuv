@@ -113,7 +113,9 @@ TEST_IMPL(udp_no_autobind) {
   ASSERT(0 == uv_udp_init(loop, &h));
   ASSERT(UV_EBADF == uv_udp_set_multicast_ttl(&h, 32));
   ASSERT(UV_EBADF == uv_udp_set_broadcast(&h, 1));
+#ifndef __MVS__
   ASSERT(UV_EBADF == uv_udp_set_ttl(&h, 1));
+#endif
   ASSERT(UV_EBADF == uv_udp_set_multicast_loop(&h, 1));
   ASSERT(UV_EBADF == uv_udp_set_multicast_interface(&h, "0.0.0.0"));
 

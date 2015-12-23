@@ -52,7 +52,11 @@ static int udp_options_test(const struct sockaddr* addr) {
   /* values 1-255 should work */
   for (i = 1; i <= 255; i++) {
     r = uv_udp_set_ttl(&h, i);
+#if defined(__MVS__)
+    ASSERT(addr->sa_family == AF_INET ? r == -EINVAL : r == 0);
+#else
     ASSERT(r == 0);
+#endif
   }
 
   for (i = 0; i < (int) ARRAY_SIZE(invalid_ttls); i++) {

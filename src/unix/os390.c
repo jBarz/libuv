@@ -537,7 +537,8 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
 int uv_interface_addresses(uv_interface_address_t** addresses,
 		int* count) {
 	uv_interface_address_t* address;
-	int sockfd, size = 1;
+	int sockfd;
+	int size = 16384;
 	struct ifconf ifc;
 	struct ifreq *ifr, *p, flg;
 
@@ -548,7 +549,12 @@ int uv_interface_addresses(uv_interface_address_t** addresses,
 	}
 
 	ifc.ifc_req = (struct ifreq*)uv__malloc(size);
-	ifc.ifc_len = 16384;
+	ifc.ifc_len = size;
+	if (ioctl(sockfd, SIOCGIFCONF, &ifc) == -1) {
+		SAVE_ERRNO(uv__close(sockfd));
+		return -errno;
+	}
+
 
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define ADDR_SIZE(p) MAX((p).sa_len, sizeof(p))
@@ -622,6 +628,7 @@ int uv_interface_addresses(uv_interface_address_t** addresses,
 	}
 
 #undef ADDR_SIZE
+#undef MAX
 
 	uv__close(sockfd);
 	return 0;

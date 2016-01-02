@@ -68,8 +68,13 @@ static int _append(struct _epoll_list *lst, int fd, struct epoll_event events)
 
 int epoll_create1(int flags)
 {
-    struct _epoll_list* p = (void*)malloc(sizeof(struct _epoll_list) * MAX_ITEMS_PER_EPOLL);
+    struct _epoll_list* p = (void*)calloc(1, sizeof(struct _epoll_list));
     _global_epoll_list[_number_of_epolls++] = p;
+    if (pthread_mutex_init(&p->lock, NULL) != 0) {
+        errno = ENOLCK;
+        return -1;
+    }
+    p->size = 0;
     return (unsigned)p; 
 }
 
@@ -86,26 +91,33 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
     else if(op == EPOLL_CTL_ADD)
     {
         int index;
+	pthread_mutex_lock(&lst->lock);
         if( _doesExist(lst, fd, &index) )
         {
             //printf("log: will not add fd %d, already exists\n", fd);
+	    pthread_mutex_unlock(&lst->lock);
             errno = EEXIST;
             return -1;
         }
         //printf("log: adding fd %d\n", fd);
-	return _append(lst, fd, *event);
+	int retval = _append(lst, fd, *event);
+	pthread_mutex_unlock(&lst->lock);
+	return retval;
     }
     else if(op == EPOLL_CTL_MOD)
     {
         int index;
+	pthread_mutex_lock(&lst->lock);
         if( !_doesExist(lst, fd, &index) )
         {
             //printf("log: does not exist fd=%d \n", fd);
+	    pthread_mutex_lock(&lst->lock);
             errno = ENOENT;
             return -1;
         }
         //printf("log: modifying fd %d\n", fd);
 	_modify(lst, index, *event);
+	pthread_mutex_unlock(&lst->lock);
     }
     else 
     {
@@ -155,7 +167,9 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
         if(pfds[i].revents & POLLHUP)
         {
             ev.events = ev.events | EPOLLHUP;
+	    pthread_mutex_lock(&lst->lock);
             _removefd(lst, ev.data.fd);
+	    pthread_mutex_unlock(&lst->lock);
             //printf("log: fd %d not available anymore\n", ev.data.fd);
         }
 
@@ -174,11 +188,13 @@ int epoll_file_close(int fd)
 	//printf("log: %d removing fd=%d\n", __LINE__, fd);
 		struct _epoll_list *lst = _global_epoll_list[i];
 		int index;
+	        pthread_mutex_lock(&lst->lock);
 		if(_doesExist(lst, fd, &index) )
 		{
 		//printf("log: really removing fd=%d\n", fd);
 			_removefd(lst, fd);
 		}
+	        pthread_mutex_unlock(&lst->lock);
 	}
 	return 0;
 }

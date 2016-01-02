@@ -556,8 +556,7 @@ int uv__cloexec_ioctl(int fd, int set) {
   return 0;
 }
 
-
-int uv__nonblock_fcntl(int fd, int set) {
+int uv__nonblock(int fd, int set) {
   int flags;
   int r;
 
@@ -586,7 +585,6 @@ int uv__nonblock_fcntl(int fd, int set) {
 
   return 0;
 }
-
 
 int uv__cloexec_fcntl(int fd, int set) {
   int flags;

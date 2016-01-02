@@ -139,14 +139,14 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
         if(!pfds[i].revents)
             continue;
 
-        if(pfds[i].revents & POLLIN)
+        if(pfds[i].revents & POLLRDNORM)
         {
             ev.events = ev.events | EPOLLIN;
             //printf("log: ev.events=%d\n", ev.events);
             //printf("log: ready for reading data on fd %d\n", ev.data.fd);
         }
         
-        if(pfds[i].revents & POLLOUT)
+        if(pfds[i].revents & POLLWRNORM)
         {
             ev.events = ev.events | EPOLLOUT;
             //printf("log: ready to write data on fd %d\n", ev.data.fd);

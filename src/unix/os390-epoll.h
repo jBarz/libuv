@@ -3,6 +3,7 @@
 
 #include <inttypes.h>
 #include <poll.h>
+#include <pthread.h>
 
 #define EPOLL_CTL_ADD 1
 #define EPOLL_CTL_DEL 2
@@ -54,6 +55,7 @@ struct epoll_event {
 struct _epoll_list{
    int size;
    struct pollfd items[MAX_ITEMS_PER_EPOLL];
+   pthread_mutex_t lock;
 };
 
 int epoll_create1(int flags);

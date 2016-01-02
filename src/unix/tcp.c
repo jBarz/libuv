@@ -290,8 +290,6 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
     saddr.sin_family = AF_INET;
     if( bind(tcp->io_watcher.fd, (struct sockaddr*)&saddr, sizeof saddr)) {
       if (errno == EAFNOSUPPORT)
-        /* OSX, other BSDs and SunoS fail with EAFNOSUPPORT when binding a
-        * socket created with AF_INET to an AF_INET6 address or vice versa. */
         return -EINVAL;
       return -errno;
     }
@@ -314,8 +312,10 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
 
 
 int uv__tcp_nodelay(int fd, int on) {
+#if !defined(__MVS__)
   if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)))
     return -errno;
+#endif
   return 0;
 }
 

@@ -509,7 +509,9 @@ UV_EXTERN int uv_is_closing(const uv_handle_t* handle);
 struct uv_tcp_s {
   UV_HANDLE_FIELDS
   UV_STREAM_FIELDS
+#ifdef __MVS__
   UV_TCP_PRIVATE_FIELDS
+#endif
 };
 
 UV_EXTERN int uv_tcp_init(uv_loop_t*, uv_tcp_t* handle);

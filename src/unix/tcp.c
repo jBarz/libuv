@@ -125,8 +125,7 @@ int uv__tcp_bind(uv_tcp_t* tcp,
 #endif
 
   errno = 0;
-  int jbar=0;
-  if (jbar = bind(tcp->io_watcher.fd, addr, addrlen) && errno != EADDRINUSE) {
+  if (bind(tcp->io_watcher.fd, addr, addrlen) && errno != EADDRINUSE) {
     if (errno == EAFNOSUPPORT)
       /* OSX, other BSDs and SunoS fail with EAFNOSUPPORT when binding a
        * socket created with AF_INET to an AF_INET6 address or vice versa. */
@@ -138,7 +137,9 @@ int uv__tcp_bind(uv_tcp_t* tcp,
   if (addr->sa_family == AF_INET6)
     tcp->flags |= UV_HANDLE_IPV6;
 
+#ifdef __MVS__
   tcp->is_bound = 1;
+#endif
 
   return 0;
 }

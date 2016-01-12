@@ -21,7 +21,6 @@
 #include "uv.h"
 #include "internal.h"
 #include "CSRSIC.H"
-#include "os390-syscalls.h"
 
 #include <stdio.h>
 #include <stdint.h>
@@ -50,6 +49,12 @@
 
 #include <limits.h>
 #include <strings.h>
+
+#define _XOPEN_SOURCE 500
+#define _AIO_OS390           		/* Expose z/OS Extensions            */
+#include <aio.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>         		/* msg queue structures              */
 
 #define RDWR_BUF_SIZE   4096
 #define EQ(a,b)         (strcmp(a,b) == 0)
@@ -271,26 +276,31 @@ static int invokesiv1v2(siv1v2 *info)
 }
 
 int uv__platform_loop_init(uv_loop_t* loop) {
-	int fd;
 
-	fd = uv__epoll_create1(UV__EPOLL_CLOEXEC);
+	key_t MyKey = 0x0A10C0DE; 
+	int msgqid = msgget( MyKey, IPC_CREAT + S_IRUSR + S_IWUSR );                    
 
-	/* epoll_create1() can fail either because it's not implemented (old kernel)
-	 * or because it doesn't understand the EPOLL_CLOEXEC flag.
-	 */
-	if (fd == -1 && (errno == ENOSYS || errno == EINVAL)) {
-		fd = uv__epoll_create(256);
-
-		if (fd != -1)
-			uv__cloexec(fd, 1);
-	}
-
-	loop->backend_fd = fd;
+	loop->backend_fd = msgqid;
 	loop->inotify_fd = -1;
 	loop->inotify_watchers = NULL;
 
-	if (fd == -1)
-		return -errno;
+	if( msgqid == -1 )                                                              
+		return -errno;                                                          
+
+	ssize_t DrainRV = 0;                                                            
+	int DrainedType;                                                                
+	printf("JBAR: Msg Queue Created: %X \n", msgqid);                     
+
+	/* Drain the queue of any residual messages */                                  
+	while (DrainRV != -1) {                                                         
+		DrainRV = msgrcv( msgqid,                                               
+				&DrainedType,                                           
+				0,            /* Recv just the type field  */           
+				0,            /* Receive any type message  */           
+				IPC_NOWAIT + MSG_NOERROR ); /* Don't wait  */           
+		/* and truncation is ok.*/                                              
+		printf("JBAR: -Draining: RV=%d, Type=%X \n", DrainRV,DrainedType);      
+	}                                                                               
 
 	return 0;
 }
@@ -670,6 +680,7 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
 	 */
 	if (loop->backend_fd >= 0) {
 		uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, &dummy);
+		msgctl(loop->backend_fd,  cmd, struct msqid_ds *buf);
 	}
 }
 

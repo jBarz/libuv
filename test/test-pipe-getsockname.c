@@ -82,7 +82,6 @@ static void pipe_server_connection_cb(uv_stream_t* handle, int status) {
   /* This function *may* be called, depending on whether accept or the
    * connection callback is called first.
    */
-  //printf("JBAR server accepted the connection status=%d\n", status);
   ASSERT(status == 0);
 }
 
@@ -124,7 +123,6 @@ TEST_IMPL(pipe_getsockname) {
 
   r = uv_listen((uv_stream_t*) &pipe_server, 0, pipe_server_connection_cb);
   ASSERT(r == 0);
-  //printf("JBAR server is listening for connection requests\n");
 
   r = uv_pipe_init(loop, &pipe_client, 0);
   ASSERT(r == 0);
@@ -138,7 +136,6 @@ TEST_IMPL(pipe_getsockname) {
   ASSERT(r == UV_EBADF);
 
   uv_pipe_connect(&connect_req, &pipe_client, TEST_PIPENAME, pipe_client_connect_cb);
-  //printf("JBAR issued connection request from client\n");
 
   len = sizeof buf;
   r = uv_pipe_getsockname(&pipe_client, buf, &len);

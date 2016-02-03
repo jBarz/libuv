@@ -25,6 +25,7 @@
 static uv_timer_t timer_handle;
 
 static void timer_cb(uv_timer_t* handle) {
+printf("JBAR: in timer_cb\n");
   ASSERT(handle);
 }
 
@@ -32,10 +33,12 @@ static void timer_cb(uv_timer_t* handle) {
 static uv_work_t work_req;
 
 static void work_cb(uv_work_t* req) {
+printf("JBAR: in work_cb\n");
   ASSERT(req);
 }
 
 static void after_work_cb(uv_work_t* req, int status) {
+printf("JBAR: in after_work_cb\n");
   ASSERT(req);
   ASSERT(status == 0);
 }
@@ -46,19 +49,23 @@ TEST_IMPL(loop_alive) {
   ASSERT(!uv_loop_alive(uv_default_loop()));
 
   /* loops with handles are alive */
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
   uv_timer_init(uv_default_loop(), &timer_handle);
   uv_timer_start(&timer_handle, timer_cb, 100, 0);
   ASSERT(uv_loop_alive(uv_default_loop()));
 
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
   r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
   ASSERT(!uv_loop_alive(uv_default_loop()));
 
   /* loops with requests are alive */
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
   r = uv_queue_work(uv_default_loop(), &work_req, work_cb, after_work_cb);
   ASSERT(r == 0);
   ASSERT(uv_loop_alive(uv_default_loop()));
 
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
   r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
   ASSERT(!uv_loop_alive(uv_default_loop()));

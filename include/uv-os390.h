@@ -22,16 +22,27 @@
 #ifndef UV_MVS_H
 #define UV_MVS_H
 
-#define UV_PLATFORM_LOOP_FIELDS                                               \
-  uv__io_t inotify_read_watcher;                                              \
-  void* inotify_watchers;                                                     \
-  int inotify_fd;                                                             \
+#define _AIO_OS390
+#include <aio.h>
+#define SIG_AIO_READ  SIGUSR1           /* Signal used for aio_read            */
+#define SIG_AIO_WRITE SIGUSR2		/* Signal used for aio_write           */
+
 
 #define UV_PLATFORM_FS_EVENT_FIELDS                                           \
   void* watchers[2];                                                          \
   int wd;                                                                     \
 
-#define UV_TCP_PRIVATE_PLATFORM_FIELDS                                     \
-    int is_bound;
+#define UV_TCP_PRIVATE_PLATFORM_FIELDS                                        \
+    int is_bound;							      \
+
+#define UV_PLATFORM_WRITE_FIELDS                                              \
+    struct aiocb aio_write;							      
+
+#define UV_STREAM_PRIVATE_PLATFORM_FIELDS				      \
+    struct aiocb aio_read;
+
+#define UV_IO_PRIVATE_PLATFORM_FIELDS					      \
+    struct aiocb *aio_read, *aio_write;
+   
 
 #endif /* UV_MVS_H */

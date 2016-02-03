@@ -64,6 +64,5 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 int epoll_pwait(int epfd, struct epoll_event *events, int maxevents, int timeout, int sigmask);
 int epoll_file_close(int fd);
 
-key_t MyKey = 0x0A10C0DE;
-
 #endif
+

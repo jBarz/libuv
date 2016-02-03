@@ -258,6 +258,7 @@ typedef struct {
   unsigned int nbufs;                                                         \
   int error;                                                                  \
   uv_buf_t bufsml[4];                                                         \
+  UV_PLATFORM_WRITE_FIELDS                                                    \
 
 #define UV_CONNECT_PRIVATE_FIELDS                                             \
   void* queue[2];                                                             \

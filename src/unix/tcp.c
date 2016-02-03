@@ -205,9 +205,8 @@ int uv_tcp_open(uv_tcp_t* handle, uv_os_sock_t sock) {
   if (err)
     return err;
 
-  return uv__stream_open((uv_stream_t*)handle,
-                         sock,
-                         UV_STREAM_READABLE | UV_STREAM_WRITABLE);
+  return uv__stream_open((uv_stream_t*)handle, sock, 
+				UV_STREAM_READABLE | UV_STREAM_WRITABLE );
 }
 
 
@@ -299,9 +298,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
 #endif
 
   if (listen(tcp->io_watcher.fd, backlog))
-{
     return -errno;
-}
   tcp->connection_cb = cb;
 
   /* Start listening for connections. */

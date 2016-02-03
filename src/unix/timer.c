@@ -74,6 +74,7 @@ int uv_timer_start(uv_timer_t* handle,
   if (cb == NULL)
     return -EINVAL;
 
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
   if (uv__is_active(handle))
     uv_timer_stop(handle);
 
@@ -102,6 +103,8 @@ int uv_timer_stop(uv_timer_t* handle) {
   if (!uv__is_active(handle))
     return 0;
 
+printf("JBAR stopping timer\n");
+
   heap_remove((struct heap*) &handle->loop->timer_heap,
               (struct heap_node*) &handle->heap_node,
               timer_less_than);
@@ -115,6 +118,7 @@ int uv_timer_again(uv_timer_t* handle) {
   if (handle->timer_cb == NULL)
     return -EINVAL;
 
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
   if (handle->repeat) {
     uv_timer_stop(handle);
     uv_timer_start(handle, handle->timer_cb, handle->repeat, handle->repeat);
@@ -141,7 +145,10 @@ int uv__next_timeout(const uv_loop_t* loop) {
 
   heap_node = heap_min((const struct heap*) &loop->timer_heap);
   if (heap_node == NULL)
+{
+printf("JBAR: wait indefinitely\n");
     return -1; /* block indefinitely */
+}
 
 #ifdef __MVS__
   //can't use const in this builtin
@@ -170,10 +177,11 @@ void uv__run_timers(uv_loop_t* loop) {
       break;
 
     handle = container_of(heap_node, uv_timer_t, heap_node);
-//printf("JBAR status timeout=%llu loop=%llu\n", handle->timeout, loop->time);
+printf("JBAR status timeout=%llu loop=%llu\n", handle->timeout, loop->time);
     if (handle->timeout > loop->time)
       break;
 
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
     uv_timer_stop(handle);
     uv_timer_again(handle);
     handle->timer_cb(handle);
@@ -182,5 +190,6 @@ void uv__run_timers(uv_loop_t* loop) {
 
 
 void uv__timer_close(uv_timer_t* handle) {
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
   uv_timer_stop(handle);
 }

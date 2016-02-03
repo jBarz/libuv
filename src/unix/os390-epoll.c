@@ -52,7 +52,7 @@ static void _modify(struct _epoll_list *lst, int index, struct epoll_event event
             i->events |= POLLOUT; 
         if(events.events & EPOLLHUP)
             i->events |= POLLHUP; 
-    //printf("log: events = %d\n", i->events);
+    printf("log: events = %d\n", i->events);
 
 }
 
@@ -85,7 +85,7 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
     if(op == EPOLL_CTL_DEL){
         if(!_removefd(lst, fd))
             return ENOENT;
-            //printf("log: removed fd %d\n", fd);
+            printf("log: removed fd %d\n", fd);
     }
 
     else if(op == EPOLL_CTL_ADD)
@@ -94,12 +94,12 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 	pthread_mutex_lock(&lst->lock);
         if( _doesExist(lst, fd, &index) )
         {
-            //printf("log: will not add fd %d, already exists\n", fd);
+            printf("log: will not add fd %d, already exists\n", fd);
 	    pthread_mutex_unlock(&lst->lock);
             errno = EEXIST;
             return -1;
         }
-        //printf("log: adding fd %d\n", fd);
+        printf("log: adding fd %d\n", fd);
 	int retval = _append(lst, fd, *event);
 	pthread_mutex_unlock(&lst->lock);
 	return retval;
@@ -110,18 +110,18 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 	pthread_mutex_lock(&lst->lock);
         if( !_doesExist(lst, fd, &index) )
         {
-            //printf("log: does not exist fd=%d \n", fd);
+            printf("log: does not exist fd=%d \n", fd);
 	    pthread_mutex_lock(&lst->lock);
             errno = ENOENT;
             return -1;
         }
-        //printf("log: modifying fd %d\n", fd);
+        printf("log: modifying fd %d\n", fd);
 	_modify(lst, index, *event);
 	pthread_mutex_unlock(&lst->lock);
     }
     else 
     {
-        //printf("epoll error %d\n", op);
+        printf("epoll error %d\n", op);
         abort();
     }
     return 0;
@@ -131,12 +131,12 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
     struct _epoll_list *lst = (struct _epoll_list*)epfd;
 
-    //printf("log: poll args %d, %d \n", lst->size, timeout);
+    printf("log: poll args %d, %d \n", lst->size, timeout);
     struct pollfd *pfds = lst->items;
-    //for (int i = 0; i < lst->size && i < maxevents; ++i)                     
-        //printf("log: fd=%d events=%d\n", pfds[i].fd, pfds[i].events);
+    for (int i = 0; i < lst->size && i < maxevents; ++i)
+      printf("log: fd=%d events=%d\n", pfds[i].fd, pfds[i].events);
     int returnval = poll( pfds, lst->size, timeout );
-    //printf("log: poll args %d, %d returns %d errno %d\n", lst->size, timeout, returnval, errno);
+    printf("log: poll args %d, %d returns %d errno %d\n", lst->size, timeout, returnval, errno);
     if(returnval == -1)
         return returnval;
     else
@@ -146,7 +146,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
     for (int i = 0; i < lst->size && i < maxevents; ++i)                     
     {
         struct epoll_event ev = { 0, 0 };
-        //printf("log: fd=%d revents=%d\n", pfds[i].fd, pfds[i].revents);
+        printf("log: fd=%d revents=%d\n", pfds[i].fd, pfds[i].revents);
         ev.data.fd = pfds[i].fd;
         if(!pfds[i].revents)
             continue;
@@ -154,14 +154,14 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
         if(pfds[i].revents & POLLRDNORM)
         {
             ev.events = ev.events | EPOLLIN;
-            //printf("log: ev.events=%d\n", ev.events);
-            //printf("log: ready for reading data on fd %d\n", ev.data.fd);
+            printf("log: ev.events=%d\n", ev.events);
+            printf("log: ready for reading data on fd %d\n", ev.data.fd);
         }
         
         if(pfds[i].revents & POLLWRNORM)
         {
             ev.events = ev.events | EPOLLOUT;
-            //printf("log: ready to write data on fd %d\n", ev.data.fd);
+            printf("log: ready to write data on fd %d\n", ev.data.fd);
         }
 
         if(pfds[i].revents & POLLHUP)
@@ -170,7 +170,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 	    pthread_mutex_lock(&lst->lock);
             _removefd(lst, ev.data.fd);
 	    pthread_mutex_unlock(&lst->lock);
-            //printf("log: fd %d not available anymore\n", ev.data.fd);
+            printf("log: fd %d not available anymore\n", ev.data.fd);
         }
 
         events[reventcount++] = ev; 
@@ -182,19 +182,20 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 
 int epoll_file_close(int fd)
 {
-	//printf("log: %d removing fd=%d\n", __LINE__, fd);
+	printf("log: %d removing fd=%d\n", __LINE__, fd);
 	for( int i = 0; i < _number_of_epolls; ++i )
 	{
-	//printf("log: %d removing fd=%d\n", __LINE__, fd);
+	printf("log: %d removing fd=%d\n", __LINE__, fd);
 		struct _epoll_list *lst = _global_epoll_list[i];
 		int index;
 	        pthread_mutex_lock(&lst->lock);
 		if(_doesExist(lst, fd, &index) )
 		{
-		//printf("log: really removing fd=%d\n", fd);
+		printf("log: really removing fd=%d\n", fd);
 			_removefd(lst, fd);
 		}
 	        pthread_mutex_unlock(&lst->lock);
 	}
 	return 0;
 }
+

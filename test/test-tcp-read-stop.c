@@ -31,6 +31,14 @@ static void fail_cb(void) {
   ASSERT(0 && "fail_cb called");
 }
 
+static void alloc_cb(uv_handle_t* handle,
+                     size_t suggested_size,
+                     uv_buf_t* buf) {
+  static char slab[65536];
+  ASSERT(suggested_size <= sizeof(slab));
+  buf->base = slab;
+  buf->len = sizeof(slab);
+}
 
 static void write_cb(uv_write_t* req, int status) {
   uv_close((uv_handle_t*) &timer_handle, NULL);
@@ -53,7 +61,7 @@ static void connect_cb(uv_connect_t* req, int status) {
   ASSERT(0 == status);
   ASSERT(0 == uv_timer_start(&timer_handle, timer_cb, 50, 0));
   ASSERT(0 == uv_read_start((uv_stream_t*) &tcp_handle,
-                            (uv_alloc_cb) fail_cb,
+                            (uv_alloc_cb) alloc_cb,
                             (uv_read_cb) fail_cb));
 }
 

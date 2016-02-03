@@ -76,7 +76,6 @@
 
 #ifdef __MVS__
 #include <sys/ioctl.h>
-#include <src/unix/os390-epoll.h>
 #endif
 
 static int uv__run_pending(uv_loop_t* loop);
@@ -350,8 +349,9 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
       timeout = uv_backend_timeout(loop);
 
     /*JBAR*/
-    //uv_print_all_handles(loop);
+    uv_print_all_handles(loop);
     /* JBAR */
+
     uv__io_poll(loop, timeout);
     uv__run_check(loop);
     uv__run_closing_handles(loop);
@@ -837,7 +837,6 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   w->pevents |= events;
   maybe_resize(loop, w->fd + 1);
 
-  ////printf("JBAR uv__io_start %s:%d %d\n", __FILE__,__LINE__,w->fd);
 #if !defined(__sun)
   /* The event ports backend needs to rearm all file descriptors on each and
    * every tick of the event loop but the other backends allow us to
@@ -856,7 +855,6 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
      ////printf("JBAR adding handle for fd %d on loop watcher_queue\n", w->fd);
     QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
   }
-
 
   if (loop->watchers[w->fd] == NULL) {
     loop->watchers[w->fd] = w;

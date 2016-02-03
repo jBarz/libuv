@@ -92,6 +92,7 @@ static void worker(void* arg) {
       break;
 
     w = QUEUE_DATA(q, struct uv__work, wq);
+printf("JBAR in worker\n");
     w->work(w);
 
     uv_mutex_lock(&w->loop->wq_mutex);

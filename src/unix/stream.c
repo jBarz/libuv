@@ -407,6 +407,13 @@ int uv__stream_open(uv_stream_t* stream, int fd, int flags) {
     /* TODO Use delay the user passed in. */
     if ((stream->flags & UV_TCP_KEEPALIVE) && uv__tcp_keepalive(fd, 1, 60))
       return -errno;
+
+#if defined(__MVS__)
+    if (uv__nonblock(fd, 0))
+      return -errno;
+    stream->flags |= UV_STREAM_BLOCKING;
+#endif
+
   }
 
 #if defined(__APPLE__)
@@ -518,7 +525,23 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(stream->accepted_fd == -1);
   assert(!(stream->flags & UV_CLOSING));
 
+#if defined(__MVS__)
+  /* capture error state of the prior aio accept */
+  int aio_accept_err = stream->aio_read.aio_rv < 0 ? -stream->aio_read.aio_rc : stream->aio_read.aio_rv;
+
+  /* start polling for next connection */
+  if(stream->type == UV_TCP) {
+    int rv, rc, rsn;
+    BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+    printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
+    assert(rv==0);
+  }
+  else
+    uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
+ 
+#else
   uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
+#endif
 
   /* connection_cb can close the server socket while we're
    * in the loop so check it on each iteration.
@@ -531,7 +554,14 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       return;
 #endif /* defined(UV_HAVE_KQUEUE) */
 
+#if defined(__MVS__)
+    if(stream->type == UV_TCP)
+      err = aio_accept_err;
+    else
+      err = uv__accept(uv__stream_fd(stream));
+#else
     err = uv__accept(uv__stream_fd(stream));
+#endif
     if (err < 0) {
       if (err == -EAGAIN || err == -EWOULDBLOCK)
         return;  /* Not an error. */
@@ -556,7 +586,19 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     if (stream->accepted_fd != -1) {
 	assert(0);
       /* The user hasn't yet accepted called uv_accept() */
+#if defined(__MVS__)
+      if(stream->aio_read.aio_fildes != -1) {
+        int rv, rc, rsn;
+        stream->aio_read.aio_cmd = AIO_CANCEL;
+        BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+        printf("JBAR issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
+        assert(rv==0);
+      }
+      else
+        uv__io_stop(loop, &stream->io_watcher, POLLIN);
+#else
       uv__io_stop(loop, &stream->io_watcher, POLLIN);
+#endif
       return;
     }
 
@@ -565,6 +607,11 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       struct timespec timeout = { 0, 1 };
       usleep(1);
     }
+
+#if defined(__MVS__)
+    /* This accept loop is useless. We want to wait for aio signal for the next accept */
+    break;
+#endif
   }
 }
 
@@ -593,8 +640,6 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
       }
 #if defined(__MVS__)
       ((uv_tcp_t*)client)->is_bound = 1;
-      uv__nonblock(server->accepted_fd, 0);
-      client->flags |= UV_STREAM_BLOCKING;
       client->aio_read.aio_fildes = server->accepted_fd;
 #endif
     printf("JBAR just accepted tcp fd=%d by server fd=%d\n", uv__stream_fd(client), uv__stream_fd(server)); 
@@ -635,8 +680,23 @@ done:
     }
   } else {
     server->accepted_fd = -1;
-    if (err == 0)
+
+    if (err == 0) {
+
+#if defined(__MVS__)
+      if(server->aio_read.aio_fildes != -1) {
+        int rv, rc, rsn;
+        BPX1AIO(sizeof(server->aio_read), &server->aio_read, &rv, &rc, &rsn);
+        printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", server->aio_read.aio_fildes, rv, rc, rsn);
+        assert(rv==0);
+      }
+      else
+        uv__io_start(server->loop, &server->io_watcher, POLLIN);
+#else
       uv__io_start(server->loop, &server->io_watcher, POLLIN);
+#endif
+    }
+
   }
   return err;
 }
@@ -1508,6 +1568,10 @@ static void uv__stream_connect(uv_stream_t* stream) {
     stream->delayed_error = 0;
   } else {
     /* Normal situation: we need to get the socket error from the kernel. */
+
+#if defined(__MVS__)
+    error = req->aio_connect.aio_rv == 0 ? 0 : -req->aio_connect.aio_rc;
+#else
     assert(uv__stream_fd(stream) >= 0);
     assert(0 == getsockopt(uv__stream_fd(stream),
                SOL_SOCKET,
@@ -1515,6 +1579,7 @@ static void uv__stream_connect(uv_stream_t* stream) {
                &error,
                &errorsize));
     error = -error;
+#endif
   }
 
   if (error == -EINPROGRESS)
@@ -1523,19 +1588,11 @@ static void uv__stream_connect(uv_stream_t* stream) {
 #if defined(__MVS__)
   if (!error && stream->type == UV_TCP)
   {
-    /* Block so that it can be used with asyncio */
-    error = uv__nonblock(uv__stream_fd(stream), 0);
-    stream->flags |= UV_STREAM_BLOCKING;
-    /* in async mode. No need for any more polling */
-    uv__io_close(stream->loop, &stream->io_watcher);
-    printf("JBAR fd=%d has connected and is now async\n", uv__stream_fd(stream));
-    stream->aio_read.aio_fildes = uv__stream_fd(stream);
-
     if(stream->flags & UV_STREAM_READING)
     {
       /* Client already asked to read from it so start reading right away */
       uv_buf_t buf;
-      /* create aiocb here and point to the buffers above */
+      /* create aiocb here and create buffers */
       memset(&stream->aio_read, 0, sizeof(struct aiocb));
       stream->aio_read.aio_fildes = uv__stream_fd(stream);
       stream->aio_read.aio_notifytype = AIO_POSIX;
@@ -1564,10 +1621,14 @@ static void uv__stream_connect(uv_stream_t* stream) {
   stream->connect_req = NULL;
   uv__req_unregister(stream->loop, req);
 
-<<<<<<< HEAD
-  if (error < 0 || QUEUE_EMPTY(&stream->write_queue)) {
+#if defined(__MVS__)
+  if (stream->type != UV_TCP && 
+       (error < 0 || QUEUE_EMPTY(&stream->write_queue)))
     uv__io_stop(stream->loop, &stream->io_watcher, POLLOUT);
-  }
+#else
+  if (error < 0 || QUEUE_EMPTY(&stream->write_queue))
+    uv__io_stop(stream->loop, &stream->io_watcher, POLLOUT);
+#endif
 
   if (req->cb)
     req->cb(req, error);
@@ -1794,7 +1855,7 @@ int uv_read_start(uv_stream_t* stream,
   stream->alloc_cb = alloc_cb;
 
 #if defined(__MVS__)
-  if(stream->type == UV_TCP && stream->connect_req == NULL)
+  if(stream->type == UV_TCP)
   {
     assert(stream->flags & UV_STREAM_BLOCKING);
     uv_buf_t buf;
@@ -1845,7 +1906,7 @@ int uv_read_stop(uv_stream_t* stream) {
       stream->aio_read.aio_cmd = AIO_CANCEL;
       BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
       printf("JBAR issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
-      assert(rv == AIO_CANCELED);
+      assert(rv != -1 || (rv == -1 && rc == EALREADY ));
       //assert(aio_cancel(uv__stream_fd(stream), &stream->aio_read)== AIO_CANCELED);
       //printf("JBAR aio_cancel fd=%d\n", uv__stream_fd(stream));
     }

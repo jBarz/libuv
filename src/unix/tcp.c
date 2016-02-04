@@ -38,6 +38,7 @@ static int maybe_new_socket(uv_tcp_t* handle, int domain, int flags) {
   }
 
   err = uv__socket(domain, SOCK_STREAM, 0);
+
   if (err < 0)
     return err;
   sockfd = err;
@@ -93,19 +94,24 @@ int uv__tcp_bind(uv_tcp_t* tcp,
   int err;
   int on;
 
+printf("JBAR %s:%d\n", __FILE__,__LINE__);
   /* Cannot set IPv6-only mode on non-IPv6 socket. */
   if ((flags & UV_TCP_IPV6ONLY) && addr->sa_family != AF_INET6)
     return -EINVAL;
 
+printf("JBAR %s:%d\n", __FILE__,__LINE__);
   err = maybe_new_socket(tcp,
                          addr->sa_family,
                          UV_STREAM_READABLE | UV_STREAM_WRITABLE);
   if (err)
     return err;
+printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
   on = 1;
   if (setsockopt(tcp->io_watcher.fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
+{printf("JBAR %s:%d\n", __FILE__,__LINE__); perror("Failed to set SO_REUSEADDR");
     return -errno;
+}
 
 #ifdef IPV6_V6ONLY
   if (addr->sa_family == AF_INET6) {
@@ -123,6 +129,7 @@ int uv__tcp_bind(uv_tcp_t* tcp,
     }
   }
 #endif
+printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
   errno = 0;
   if (bind(tcp->io_watcher.fd, addr, addrlen) && errno != EADDRINUSE) {
@@ -133,6 +140,7 @@ int uv__tcp_bind(uv_tcp_t* tcp,
     return -errno;
   }
   tcp->delayed_error = -errno;
+printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
   if (addr->sa_family == AF_INET6)
     tcp->flags |= UV_HANDLE_IPV6;
@@ -141,6 +149,7 @@ int uv__tcp_bind(uv_tcp_t* tcp,
   tcp->is_bound = 1;
 #endif
 
+printf("JBAR %s:%d\n", __FILE__,__LINE__);
   return 0;
 }
 
@@ -167,12 +176,36 @@ int uv__tcp_connect(uv_connect_t* req,
   handle->delayed_error = 0;
 
   do
+  {
+#if defined(__MVS__)
+    int rv, rc, rsn;
+    memset(&req->aio_connect, 0, sizeof(struct aiocb));
+    req->aio_connect.aio_fildes = uv__stream_fd(handle);
+    req->aio_connect.aio_notifytype = AIO_POSIX;
+    req->aio_connect.aio_cmd = AIO_CONNECT;
+    req->aio_connect.aio_sigevent.sigev_notify = SIGEV_SIGNAL;
+    req->aio_connect.aio_sigevent.sigev_signo = SIG_AIO_READ;
+    req->aio_connect.aio_sigevent.sigev_value.sival_ptr = &handle->io_watcher;
+    req->aio_connect.aio_sockaddrlen = addrlen;
+    req->aio_connect.aio_sockaddrptr = (struct sockaddr_in*)addr;
+    BPX1AIO(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
+    printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
+    r = rv;
+    if(rv != 0)
+      errno = rc;
+#else
     r = connect(uv__stream_fd(handle), addr, addrlen);
+#endif
+  }
   while (r == -1 && errno == EINTR);
 
   if (r == -1) {
     if (errno == EINPROGRESS)
+#if defined(__MVS__)
+      return -errno;
+#else
       ; /* not an error */
+#endif
     else if (errno == ECONNREFUSED)
     /* If we get a ECONNREFUSED wait until the next tick to report the
      * error. Solaris wants to report immediately--other unixes want to
@@ -189,7 +222,9 @@ int uv__tcp_connect(uv_connect_t* req,
   QUEUE_INIT(&req->queue);
   handle->connect_req = req;
 
+#if !defined(__MVS__)
   uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);
+#endif
 
   if (handle->delayed_error)
     uv__io_feed(handle->loop, &handle->io_watcher);
@@ -201,12 +236,19 @@ int uv__tcp_connect(uv_connect_t* req,
 int uv_tcp_open(uv_tcp_t* handle, uv_os_sock_t sock) {
   int err;
 
+#if !defined(__MVS__)
   err = uv__nonblock(sock, 1);
   if (err)
     return err;
+#endif
 
   return uv__stream_open((uv_stream_t*)handle, sock, 
-				UV_STREAM_READABLE | UV_STREAM_WRITABLE );
+				  UV_STREAM_READABLE 
+				| UV_STREAM_WRITABLE
+#if 0
+				| UV_STREAM_BLOCKING
+#endif
+				);
 }
 
 
@@ -303,7 +345,23 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
 
   /* Start listening for connections. */
   tcp->io_watcher.cb = uv__server_io;
+
+#if defined(__MVS__)
+  memset(&tcp->aio_read, 0, sizeof(struct aiocb));
+  tcp->aio_read.aio_fildes = tcp->io_watcher.fd;
+  tcp->aio_read.aio_notifytype = AIO_POSIX;
+  tcp->aio_read.aio_cmd = AIO_ACCEPT;
+  tcp->aio_read.aio_sigevent.sigev_notify = SIGEV_SIGNAL;
+  tcp->aio_read.aio_sigevent.sigev_signo = SIG_AIO_READ;
+  tcp->aio_read.aio_sigevent.sigev_value.sival_ptr = &tcp->io_watcher;
+  int rv, rc, rsn;
+  BPX1AIO(sizeof(tcp->aio_read), &tcp->aio_read, &rv, &rc, &rsn);
+  printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_read.aio_fildes, rv, rc, rsn);
+  if (rv == -1)
+    return -rc;
+#else
   uv__io_start(tcp->loop, &tcp->io_watcher, POLLIN);
+#endif
 
   return 0;
 }

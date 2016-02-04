@@ -394,7 +394,6 @@ int uv_is_active(const uv_handle_t* handle) {
 }
 
 
-/* Open a socket in non-blocking close-on-exec mode, atomically if possible. */
 int uv__socket(int domain, int type, int protocol) {
   int sockfd;
   int err;
@@ -484,17 +483,19 @@ skip:
         continue;
       return -errno;
     }
+  printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
     err = uv__cloexec(peerfd, 1);
     if (err == 0)
       err = uv__nonblock(peerfd, 1);
+  printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
     if (err) {
       uv__close(peerfd);
       return err;
     }
 
-  ////printf("JBAR %s:%d server fd=%d now created socket fd=%d\n", __FILE__,__LINE__,sockfd,peerfd);
+  printf("JBAR %s:%d server fd=%d now created socket fd=%d\n", __FILE__,__LINE__,sockfd,peerfd);
     return peerfd;
   }
 }

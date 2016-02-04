@@ -41,6 +41,9 @@
 #define UV_STREAM_PRIVATE_PLATFORM_FIELDS				      \
     struct aiocb aio_read;
 
+#define UV_PLATFORM_CONNECT_FIELDS				              \
+    struct aiocb aio_connect;                                                 \
+
 #define UV_IO_PRIVATE_PLATFORM_FIELDS					      \
     struct aiocb *aio_read, *aio_write;
    

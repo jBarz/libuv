@@ -138,6 +138,7 @@ static void on_connection(uv_stream_t* server, int status) {
   uv_stream_t* stream;
   int r;
 
+printf("JBAR in on_connection\n");
   if (status != 0) {
     fprintf(stderr, "Connect error %s\n", uv_err_name(status));
   }

@@ -262,6 +262,7 @@ typedef struct {
 
 #define UV_CONNECT_PRIVATE_FIELDS                                             \
   void* queue[2];                                                             \
+  UV_PLATFORM_CONNECT_FIELDS                                                  \
 
 #define UV_SHUTDOWN_PRIVATE_FIELDS /* empty */
 

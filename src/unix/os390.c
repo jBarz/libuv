@@ -673,12 +673,15 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
 	}
 }
 
-int async_signal_check(uv_loop_t* loop) {
+int async_signal_check(uv_loop_t* loop, int timeout) {
 
 	sigset_t 	aio_completion_signals;
 	siginfo_t       info;
 	int		bSignal;
 	struct timespec	t = {0, 800 * 1000000};	// 800 miliseconds
+
+	if(timeout == -1)
+	  t.tv_sec = 2;
 
 	sigemptyset(&aio_completion_signals);
 	sigaddset(&aio_completion_signals,SIG_AIO_READ);
@@ -816,7 +819,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 			timeout = max_safe_timeout;
 
 
-		if (async_signal_check(loop)){
+		if (async_signal_check(loop, timeout)){
 			/* we processed at least 1 async io */
 			nfds = 1;
 			nevents = 1;

@@ -1399,18 +1399,6 @@ static void uv__read(uv_stream_t* stream) {
       return;
     } else if (nread == 0) {
       uv__stream_eof(stream, &buf);
-
-#if defined(__MVS__)
-      /* Continue to read */
-      if(stream->aio_read.aio_fildes != -1)
-      {
-        int rv, rc, rsn;
-        BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-        printf("JBAR issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
-        assert(rv==0);
-      }
-#endif
-
       return;
     } else {
       /* Successful read */
@@ -1981,7 +1969,12 @@ void uv__stream_close(uv_stream_t* handle) {
   }
 #endif /* defined(__APPLE__) */
 
+#if !defined(__MVS__)
+  if (stream->type != UV_TCP)
+    uv__io_close(handle->loop, &handle->io_watcher);
+#else
   uv__io_close(handle->loop, &handle->io_watcher);
+#endif
   uv_read_stop(handle);
   uv__handle_stop(handle);
 

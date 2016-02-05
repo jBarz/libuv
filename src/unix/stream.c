@@ -730,8 +730,16 @@ static void uv__drain(uv_stream_t* stream) {
   int err;
 
   assert(QUEUE_EMPTY(&stream->write_queue));
+#if defined(__MVS__)
+  if (stream->type != UV_TCP)
+  {
+    uv__io_stop(stream->loop, &stream->io_watcher, POLLOUT);
+    uv__stream_osx_interrupt_select(stream);
+  }
+#else
   uv__io_stop(stream->loop, &stream->io_watcher, POLLOUT);
   uv__stream_osx_interrupt_select(stream);
+#endif
 
   /* Shutdown? */
   if ((stream->flags & UV_STREAM_SHUTTING) &&
@@ -1466,7 +1474,7 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
 
   printf("JBAR uv_shutdown fd=%d\n", (uv__stream_fd(stream)));
 #if defined(__MVS__)
-  if(stream->aio_read.aio_fildes == -1)
+  if(stream->type != UV_TCP)
   {
     uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
     uv__stream_osx_interrupt_select(stream);

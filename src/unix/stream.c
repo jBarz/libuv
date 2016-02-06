@@ -1136,7 +1136,7 @@ uv_handle_type uv__handle_type(int fd) {
 static void uv__stream_eof(uv_stream_t* stream, const uv_buf_t* buf) {
   stream->flags |= UV_STREAM_READ_EOF;
 #if defined(__MVS__)
-  if(stream->aio_read.aio_fildes != -1)
+  if(stream->type == UV_TCP)
   {
     if(aio_error(&stream->aio_read) == EINPROGRESS)
     {

@@ -678,10 +678,7 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 	sigset_t 	aio_completion_signals;
 	siginfo_t       info;
 	int		bSignal;
-	struct timespec	t = {0, 800 * 1000000};	// 800 miliseconds
-
-	if(timeout == -1)
-	  t.tv_sec = 2;
+	struct timespec	t = {0, timeout};	// 800 miliseconds
 
 	sigemptyset(&aio_completion_signals);
 	sigaddset(&aio_completion_signals,SIG_AIO_READ);
@@ -720,7 +717,7 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 		uv__io_t *watcher = &req->handle->io_watcher;
 		/* Skip invalidated events, see uv__platform_invalidate_fd */
 		int fd = req->aio_write.aio_fildes;
-		printf("JBAR write callback called for fd=%d\n", fd);
+		printf("JBAR got SIG_AIO_WRITE\n");
 		
 		watcher->cb(loop, watcher, UV__POLLOUT);
 		return 1;
@@ -750,7 +747,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 	uint64_t sigmask;
 	uint64_t base;
 	int count;
-	int nfds;
+	int nfds=0;
 	int fd;
 	int op;
 	int i;
@@ -818,16 +815,21 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 		if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
 			timeout = max_safe_timeout;
 
+		while(nfds == 0)
+		{
+			if (async_signal_check(loop, timeout == -1 ? 300 : timeout )){
+				/* we processed at least 1 async io */
+				nfds = 1;
+				nevents = 1;
+			} else {
+				nfds = uv__epoll_wait(loop->backend_fd,
+						events,
+						ARRAY_SIZE(events),
+						timeout == -1 ? 300 : timeout);
+			} 
 
-		if (async_signal_check(loop, timeout)){
-			/* we processed at least 1 async io */
-			nfds = 1;
-			nevents = 1;
-		} else {
-			nfds = uv__epoll_wait(loop->backend_fd,
-					events,
-					ARRAY_SIZE(events),
-					timeout);
+			if (timeout != -1 )
+				break;
 		}
 
 		/* Update loop->time unconditionally. It's tempting to skip the update when

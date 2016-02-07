@@ -584,17 +584,9 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     stream->connection_cb(stream, 0);
 
     if (stream->accepted_fd != -1) {
-	assert(0);
       /* The user hasn't yet accepted called uv_accept() */
 #if defined(__MVS__)
-      if(stream->aio_read.aio_fildes != -1) {
-        int rv, rc, rsn;
-        stream->aio_read.aio_cmd = AIO_CANCEL;
-        BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-        printf("JBAR issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
-        assert(rv==0);
-      }
-      else
+      if(stream->type != UV_TCP)
         uv__io_stop(loop, &stream->io_watcher, POLLIN);
 #else
       uv__io_stop(loop, &stream->io_watcher, POLLIN);
@@ -980,7 +972,7 @@ start:
            * watcher - instead we need to try again.
            */
 #if defined(__MVS__)
-          if(stream->type == UV_TCP)
+          if(stream->type == UV_TCP && stream->flags != UV_CLOSING)
 	  {
             int rv, rc, rsn;
             BPX1AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
@@ -1138,16 +1130,8 @@ static void uv__stream_eof(uv_stream_t* stream, const uv_buf_t* buf) {
 #if defined(__MVS__)
   if(stream->type == UV_TCP)
   {
-    if(aio_error(&stream->aio_read) == EINPROGRESS)
-    {
-      int rv, rc, rsn;
-      stream->aio_read.aio_cmd = AIO_CANCEL;
-      BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-      printf("JBAR issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
-      assert(rv == AIO_CANCELED);
-      //assert(aio_cancel(uv__stream_fd(stream), &stream->aio_read)== AIO_CANCELED);
-      //printf("JBAR aio_cancel fd=%d\n", uv__stream_fd(stream));
-    }
+    printf("JBAR eof fo fd = %d\n",  stream->aio_read.aio_fildes);
+    /* no need to stop POLLIN because we haven't issued the next aio_read yet */
     /* we have just stopped reading and there are no pending writes */
     if (QUEUE_EMPTY(&stream->write_queue))
       uv__handle_stop(stream);
@@ -1166,14 +1150,6 @@ static void uv__stream_eof(uv_stream_t* stream, const uv_buf_t* buf) {
   uv__stream_osx_interrupt_select(stream);
   stream->read_cb(stream, UV_EOF, buf);
   stream->flags &= ~UV_STREAM_READING;
-#if defined(__MVS__)
-  if(stream->aio_read.aio_fildes != -1)
-  {
-    printf("freeing buffers for stream fd=%d\n", stream->aio_read.aio_fildes);
-    free(stream->aio_read.aio_buf);
-    stream->aio_read.aio_buf = NULL;
-  }
-#endif
 }
 
 
@@ -1303,7 +1279,7 @@ static void uv__read(uv_stream_t* stream) {
     assert(stream->alloc_cb != NULL);
 
 #if defined (__MVS__)
-    if(stream->aio_read.aio_fildes != -1)
+    if(stream->type == UV_TCP)
     {
 	printf("JBAR aio_buf=%s\n", stream->aio_read.aio_buf);
 	buf.base = stream->aio_read.aio_buf;
@@ -1328,7 +1304,7 @@ static void uv__read(uv_stream_t* stream) {
     if (!is_ipc) {
       do {
 #if defined (__MVS__)
-	if(stream->aio_read.aio_fildes != -1)
+	if(stream->type == UV_TCP)
 	{
 	  errno = aio_error(&stream->aio_read);
 	  if(errno == 0)
@@ -1379,23 +1355,8 @@ static void uv__read(uv_stream_t* stream) {
         if (stream->flags & UV_STREAM_READING) {
           stream->flags &= ~UV_STREAM_READING;
 #if defined(__MVS__)
-          if(stream->aio_read.aio_fildes != -1)
-          {
-            if(aio_error(&stream->aio_read) == EINPROGRESS)
-            {
-              int rv, rc, rsn;
-              stream->aio_read.aio_cmd = AIO_CANCEL;
-              BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-              printf("JBAR issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
-              assert(rv == AIO_CANCELED);
-              //assert(aio_cancel(uv__stream_fd(stream), &stream->aio_read)== AIO_CANCELED);
-              //printf("JBAR aio_cancel fd=%d\n", uv__stream_fd(stream));
-            }
-          }
-          else
-          {
+          if(stream->type != UV_TCP)
             uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
-          }
 #else
          uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
 #endif
@@ -1424,7 +1385,7 @@ static void uv__read(uv_stream_t* stream) {
 
 #if defined(__MVS__)
       /* Continue to read */
-      if(stream->aio_read.aio_fildes != -1)
+      if(stream->type == UV_TCP && !(stream->flags & UV_CLOSING))
       {
         int rv, rc, rsn;
         BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
@@ -1497,6 +1458,8 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(stream->type == UV_TCP ||
          stream->type == UV_NAMED_PIPE ||
          stream->type == UV_TTY);
+
+printf("JBAR io callback for handle %p\n", stream);
 
   assert(!(stream->flags & UV_CLOSING));
 
@@ -1604,6 +1567,7 @@ static void uv__stream_connect(uv_stream_t* stream) {
         error = -ENOMEM;
       else
       {
+        printf("JBAR allocated new read buffer for fd=%d\n", stream->aio_read.aio_fildes);
         int rv, rc, rsn;
         BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
         printf("JBAR issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
@@ -1870,6 +1834,7 @@ int uv_read_start(uv_stream_t* stream,
     stream->aio_read.aio_offset = 0;
     stream->aio_read.aio_nbytes = buf.len;
     int rv, rc, rsn;
+    printf("JBAR allocated new read buffer for fd=%d\n", stream->aio_read.aio_fildes);
     BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
     printf("JBAR issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
     assert(rv==0);
@@ -1894,18 +1859,15 @@ int uv_read_stop(uv_stream_t* stream) {
 
   stream->flags &= ~UV_STREAM_READING;
 #if defined(__MVS__)
-  if(stream->aio_read.aio_fildes != -1)
+  if(stream->type == UV_TCP)
   {
-    if(aio_error(&stream->aio_read) == EINPROGRESS)
-    {
-      int rv, rc, rsn;
-      stream->aio_read.aio_cmd = AIO_CANCEL;
-      BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-      printf("JBAR issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
-      assert(rv != -1 || (rv == -1 && rc == EALREADY ));
-      //assert(aio_cancel(uv__stream_fd(stream), &stream->aio_read)== AIO_CANCELED);
-      //printf("JBAR aio_cancel fd=%d\n", uv__stream_fd(stream));
-    }
+    int rv, rc, rsn;
+    stream->aio_read.aio_cmd = AIO_CANCEL;
+    BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+    printf("JBAR issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
+    assert(rv != -1 || (rv == -1 && rc == EALREADY ));
+    //assert(aio_cancel(uv__stream_fd(stream), &stream->aio_read)== AIO_CANCELED);
+    //printf("JBAR aio_cancel fd=%d\n", uv__stream_fd(stream));
   }
   else
   {
@@ -1918,6 +1880,15 @@ int uv_read_stop(uv_stream_t* stream) {
   if (!uv__io_active(&stream->io_watcher, POLLOUT))
     uv__handle_stop(stream);
   uv__stream_osx_interrupt_select(stream);
+
+#if defined(__MVS__)
+  if(stream->type == UV_TCP)
+  {
+    printf("freeing buffers for stream fd=%d\n", stream->aio_read.aio_fildes);
+    free(stream->aio_read.aio_buf);
+    stream->aio_read.aio_buf = NULL;
+  }
+#endif
 
   stream->read_cb = NULL;
   stream->alloc_cb = NULL;
@@ -1977,8 +1948,8 @@ void uv__stream_close(uv_stream_t* handle) {
   }
 #endif /* defined(__APPLE__) */
 
-#if !defined(__MVS__)
-  if (stream->type != UV_TCP)
+#if defined(__MVS__)
+  if (handle->type != UV_TCP)
     uv__io_close(handle->loop, &handle->io_watcher);
 #else
   uv__io_close(handle->loop, &handle->io_watcher);
@@ -1986,15 +1957,29 @@ void uv__stream_close(uv_stream_t* handle) {
   uv_read_stop(handle);
   uv__handle_stop(handle);
 
+#if defined(__MVS__)
+
+  if (handle->io_watcher.fd != -1) {
+    /* Don't close stdio file descriptors.  Nothing good comes from it. */
+    if (handle->io_watcher.fd > STDERR_FILENO)
+    {
+      //if (handle->type != UV_TCP)
+        //epoll_file_close(handle->io_watcher.fd);
+      uv__close(handle->io_watcher.fd);
+    }
+    handle->io_watcher.fd = -1;
+  }
+
+#else
+
   if (handle->io_watcher.fd != -1) {
     /* Don't close stdio file descriptors.  Nothing good comes from it. */
     if (handle->io_watcher.fd > STDERR_FILENO)
       uv__close(handle->io_watcher.fd);
     handle->io_watcher.fd = -1;
-#if defined(__MVS__)
-    handle->aio_read.aio_fildes = -1;
-#endif
   }
+
+#endif
 
   if (handle->accepted_fd != -1) {
     uv__close(handle->accepted_fd);

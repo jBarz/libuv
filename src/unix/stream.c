@@ -1387,6 +1387,23 @@ static void uv__read(uv_stream_t* stream) {
       /* Continue to read */
       if(stream->type == UV_TCP && !(stream->flags & UV_CLOSING))
       {
+        memset(&stream->aio_read, 0, sizeof(struct aiocb));
+        stream->aio_read.aio_fildes = uv__stream_fd(stream);
+        stream->aio_read.aio_notifytype = AIO_POSIX;
+        stream->aio_read.aio_cmd = AIO_READ;
+        stream->aio_read.aio_sigevent.sigev_notify = SIGEV_SIGNAL;
+        stream->aio_read.aio_sigevent.sigev_signo = SIG_AIO_READ;
+        stream->aio_read.aio_sigevent.sigev_value.sival_ptr = &stream->io_watcher;
+        stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
+        stream->aio_read.aio_buf = buf.base;
+        stream->aio_read.aio_offset = 0;
+        stream->aio_read.aio_nbytes = buf.len;
+        if (buf.len == 0) {
+          /* User indicates it can't or won't handle the read. */
+          stream->read_cb(stream, UV_ENOBUFS, &buf);
+          return;
+        }
+
         int rv, rc, rsn;
         BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
         printf("JBAR issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);

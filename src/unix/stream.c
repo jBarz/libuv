@@ -1367,6 +1367,19 @@ static void uv__read(uv_stream_t* stream) {
       }
       return;
     } else if (nread == 0) {
+#if defined(__MVS__)
+      /* Continue to read */
+      if(stream->type == UV_TCP)
+      {
+        /* Issue this read so that when it returns, we can see that the stream
+           is in EOF state and issue POLLHUP event so that we shutdown our end */
+        int rv, rc, rsn;
+        BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+        printf("JBAR issued eof sniff aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
+        assert(rv==0);
+      }
+#endif
+
       uv__stream_eof(stream, &buf);
       return;
     } else {

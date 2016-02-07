@@ -1385,7 +1385,7 @@ static void uv__read(uv_stream_t* stream) {
 
 #if defined(__MVS__)
       /* Continue to read */
-      if(stream->type == UV_TCP && !(stream->flags & UV_CLOSING))
+      if(stream->type == UV_TCP && (stream->flags & UV_STREAM_READING))
       {
         memset(&stream->aio_read, 0, sizeof(struct aiocb));
         stream->aio_read.aio_fildes = uv__stream_fd(stream);

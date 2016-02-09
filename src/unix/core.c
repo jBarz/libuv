@@ -349,7 +349,7 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
       timeout = uv_backend_timeout(loop);
 
     /*JBAR*/
-    uv_print_all_handles(loop);
+    //uv_print_all_handles(loop);
     /* JBAR */
 
     uv__io_poll(loop, timeout);
@@ -483,19 +483,17 @@ skip:
         continue;
       return -errno;
     }
-  printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
     err = uv__cloexec(peerfd, 1);
     if (err == 0)
       err = uv__nonblock(peerfd, 1);
-  printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
     if (err) {
       uv__close(peerfd);
       return err;
     }
 
-  printf("JBAR %s:%d server fd=%d now created socket fd=%d\n", __FILE__,__LINE__,sockfd,peerfd);
+  //printf("JBAR %s:%d server fd=%d now created socket fd=%d\n", __FILE__,__LINE__,sockfd,peerfd);
     return peerfd;
   }
 }
@@ -509,9 +507,6 @@ int uv__close_nocheckstdio(int fd) {
 
   saved_errno = errno;
   
- #ifdef __MVS__
-  epoll_file_close(fd);
-#endif 
   rc = close(fd);
   if (rc == -1) {
     rc = -errno;

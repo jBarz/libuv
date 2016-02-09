@@ -32,6 +32,9 @@
   void* watchers[2];                                                          \
   int wd;                                                                     \
 
+#define UV_PLATFORM_LOOP_FIELDS                                               \
+  sigset_t aio_sigset;
+
 #define UV_TCP_PRIVATE_PLATFORM_FIELDS                                        \
     int is_bound;							      \
 

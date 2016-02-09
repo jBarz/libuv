@@ -447,7 +447,12 @@ void uv__stream_flush_write_queue(uv_stream_t* stream, int error) {
 
 
 void uv__stream_destroy(uv_stream_t* stream) {
+#if defined(__MVS__)
+  if(stream->type != UV_TCP)
+    assert(!uv__io_active(&stream->io_watcher, POLLIN | POLLOUT));
+#else
   assert(!uv__io_active(&stream->io_watcher, POLLIN | POLLOUT));
+#endif
   assert(stream->flags & UV_CLOSED);
 
   if (stream->connect_req) {
@@ -1344,7 +1349,7 @@ static void uv__read(uv_stream_t* stream) {
 
     if (nread < 0) {
       /* Error */
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINPROGRESS) {
         /* Wait for the next one. */
         if (stream->flags & UV_STREAM_READING) {
           uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
@@ -2017,7 +2022,12 @@ void uv__stream_close(uv_stream_t* handle) {
     handle->queued_fds = NULL;
   }
 
+#if defined(__MVS__)
+  if (handle->type != UV_TCP)
+    assert(!uv__io_active(&handle->io_watcher, POLLIN | POLLOUT));
+#else
   assert(!uv__io_active(&handle->io_watcher, POLLIN | POLLOUT));
+#endif
 }
 
 

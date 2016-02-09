@@ -290,11 +290,10 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 	if (fd == -1)
 		return -errno;
 
-	sigset_t sigset;
-        sigemptyset(&sigset);
-        sigaddset(&sigset,SIG_AIO_READ);
-        sigaddset(&sigset,SIG_AIO_WRITE);
-        sigprocmask(SIG_BLOCK,&sigset,NULL);
+        sigemptyset(&loop->aio_sigset);
+        sigaddset(&loop->aio_sigset,SIG_AIO_READ);
+        sigaddset(&loop->aio_sigset,SIG_AIO_WRITE);
+        sigprocmask(SIG_BLOCK,&loop->aio_sigset,NULL);
 
 	return 0;
 }
@@ -678,13 +677,10 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 	sigset_t 	aio_completion_signals;
 	siginfo_t       info;
 	int		bSignal;
-	struct timespec	t = {0, timeout};	// 800 miliseconds
+	struct timespec	t = {0, timeout * 1000000};	// 800 miliseconds
 
-	sigemptyset(&aio_completion_signals);
-	sigaddset(&aio_completion_signals,SIG_AIO_READ);
-	sigaddset(&aio_completion_signals,SIG_AIO_WRITE);
-	bSignal = sigtimedwait(&aio_completion_signals, &info, &t);
-	printf("JBAR returned from sigtimedwait\n");
+	bSignal = sigtimedwait(&loop->aio_sigset, &info, &t);
+	//printf("JBAR returned from sigtimedwait\n");
 
 	if (bSignal == -1)
 		return 0;
@@ -695,11 +691,11 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 	{
 		int flags=0;
 		uv__io_t *watcher = info.si_value.sival_ptr;
-                uv_stream_t* stream = container_of(watcher, uv_stream_t, io_watcher);
-		printf("JBAR got SIG_AIO_READ\n");
+		uv_stream_t* stream = container_of(watcher, uv_stream_t, io_watcher);
+		//printf("JBAR got SIG_AIO_READ\n");
 
-                if(stream->flags & UV_CLOSING)
-                	return 1;  /* closed stream could have aio_read events that slip through */
+		if(stream->flags & UV_CLOSING)
+			return 0;  /* closed stream could have aio_read events that slip through */
 
 		if(stream->flags & UV_STREAM_READ_EOF)
 			flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
@@ -707,7 +703,7 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 			flags = UV__POLLIN;
 		
 		int fd = watcher->fd;
-		printf("JBAR read callback called for fd=%d\n", fd);
+		//printf("JBAR read callback called for fd=%d\n", fd);
 		watcher->cb(loop, watcher, flags);
 		return 1;
 	}
@@ -717,13 +713,28 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 		uv__io_t *watcher = &req->handle->io_watcher;
 		/* Skip invalidated events, see uv__platform_invalidate_fd */
 		int fd = req->aio_write.aio_fildes;
-		printf("JBAR got SIG_AIO_WRITE\n");
-		
+		//printf("JBAR got SIG_AIO_WRITE for handle %p fd=%d\n", req->handle, fd);
+
+		/* if stream is closing, we don't have to call callbacks because they have already
+		   been invoked with rc=ECANCELED */
+		if(req->handle->flags & UV_CLOSING)
+			//printf("JBAR stale event\n");
+			return 0;  /* closed stream could have aio_read events that slip through */
+
+		/* move this at the head of the write queue because the callback assumes that 
+		   this event belongs to the head of the write queue */ 
+		//printf("JBAR got signal for write request %p\n", req);
+		if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
+		{
+			QUEUE_REMOVE(&req->queue);
+			QUEUE_INSERT_HEAD(&req->handle->write_queue, &req->queue);	
+		}
 		watcher->cb(loop, watcher, UV__POLLOUT);
 		return 1;
 	}
 	else
 		assert(0 && "unexpected signal\n");
+
 
 }
 
@@ -752,7 +763,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 	int op;
 	int i;
 
-	printf("JBAR io_poll timeout=%d\n", timeout);
+	//printf("JBAR io_poll timeout=%d\n", timeout);
 	if (loop->nfds == 0) {
 		assert(QUEUE_EMPTY(&loop->watcher_queue));
 		return;
@@ -817,15 +828,16 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
 		while(nfds == 0)
 		{
-			if (async_signal_check(loop, timeout == -1 ? 300 : timeout )){
+			if (async_signal_check(loop, timeout == -1 ? 200 : timeout/2 )){
 				/* we processed at least 1 async io */
 				nfds = 1;
-				nevents = 1;
+				nevents++;
+				continue;
 			} else {
 				nfds = uv__epoll_wait(loop->backend_fd,
 						events,
 						ARRAY_SIZE(events),
-						timeout == -1 ? 300 : timeout);
+						timeout == -1 ? 200 : timeout/2);
 			} 
 
 			if (timeout != -1 )
@@ -920,6 +932,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				if (pe->events == UV__EPOLLERR || pe->events == UV__EPOLLHUP)
 					pe->events |= w->pevents & (UV__EPOLLIN | UV__EPOLLOUT);
 
+				//printf("JBAR calling sync cb fd=%d\n", fd);
 				if (pe->events != 0) {
 					w->cb(loop, w, pe->events);
 					nevents++;

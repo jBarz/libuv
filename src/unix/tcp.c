@@ -94,24 +94,19 @@ int uv__tcp_bind(uv_tcp_t* tcp,
   int err;
   int on;
 
-printf("JBAR %s:%d\n", __FILE__,__LINE__);
   /* Cannot set IPv6-only mode on non-IPv6 socket. */
   if ((flags & UV_TCP_IPV6ONLY) && addr->sa_family != AF_INET6)
     return -EINVAL;
 
-printf("JBAR %s:%d\n", __FILE__,__LINE__);
   err = maybe_new_socket(tcp,
                          addr->sa_family,
                          UV_STREAM_READABLE | UV_STREAM_WRITABLE);
   if (err)
     return err;
-printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
   on = 1;
   if (setsockopt(tcp->io_watcher.fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)))
-{printf("JBAR %s:%d\n", __FILE__,__LINE__); perror("Failed to set SO_REUSEADDR");
     return -errno;
-}
 
 #ifdef IPV6_V6ONLY
   if (addr->sa_family == AF_INET6) {
@@ -129,7 +124,6 @@ printf("JBAR %s:%d\n", __FILE__,__LINE__);
     }
   }
 #endif
-printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
   errno = 0;
   if (bind(tcp->io_watcher.fd, addr, addrlen) && errno != EADDRINUSE) {
@@ -140,7 +134,6 @@ printf("JBAR %s:%d\n", __FILE__,__LINE__);
     return -errno;
   }
   tcp->delayed_error = -errno;
-printf("JBAR %s:%d\n", __FILE__,__LINE__);
 
   if (addr->sa_family == AF_INET6)
     tcp->flags |= UV_HANDLE_IPV6;
@@ -149,7 +142,6 @@ printf("JBAR %s:%d\n", __FILE__,__LINE__);
   tcp->is_bound = 1;
 #endif
 
-printf("JBAR %s:%d\n", __FILE__,__LINE__);
   return 0;
 }
 
@@ -189,7 +181,7 @@ int uv__tcp_connect(uv_connect_t* req,
     req->aio_connect.aio_sockaddrlen = addrlen;
     req->aio_connect.aio_sockaddrptr = (struct sockaddr_in*)addr;
     BPX1AIO(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
-    printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
+    //printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
     r = rv;
     if(rv != 0)
       errno = rc;
@@ -356,7 +348,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   tcp->aio_read.aio_sigevent.sigev_value.sival_ptr = &tcp->io_watcher;
   int rv, rc, rsn;
   BPX1AIO(sizeof(tcp->aio_read), &tcp->aio_read, &rv, &rc, &rsn);
-  printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_read.aio_fildes, rv, rc, rsn);
+  //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_read.aio_fildes, rv, rc, rsn);
   if (rv == -1)
     return -rc;
 #else

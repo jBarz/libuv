@@ -66,7 +66,13 @@ static void pinger_on_close(uv_handle_t* handle) {
 
 
 static void pinger_after_write(uv_write_t *req, int status) {
-  ASSERT(status == 0);
+
+  pinger_t* pinger;
+  pinger = (pinger_t*)req->handle->data;
+  /* The last pinger_read_cb might be called before the last pinger_after_write (thus closing handles) 
+     In that case, we don't mind ECANCELED as long as the number of reads has reached NUM_PINGS */
+  ASSERT(status == 0 || (status == -ECANCELED && pinger->pongs >= NUM_PINGS));
+
   free(req);
 }
 

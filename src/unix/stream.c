@@ -775,7 +775,6 @@ static void uv__write_req_finish(uv_write_t* req) {
 
   /* Pop the req off tcp->write_queue. */
   QUEUE_REMOVE(&req->queue);
-  printf("JBAR %s:%d removing from write queue %p\n", __FILE__,__LINE__,req);
 
   /* Only free when there was no error. On error, we touch up write_queue_size
    * right before making the callback. The reason we don't do that right away
@@ -808,7 +807,6 @@ static void uv__write_req_finish(uv_write_t* req) {
       //assert(aio_write(&req_next->aio_write)==0);
       int rv, rc, rsn;
       BPX1AIO(sizeof(req_next->aio_write), &req_next->aio_write, &rv, &rc, &rsn);
-      printf("JBAR %s:%d issued write request %p\n", __FILE__,__LINE__,req_next);
       //printf("JBAR issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", req_next->aio_write, rv, rc, rsn);
       assert(rv==0);
     }
@@ -852,8 +850,6 @@ start:
   q = QUEUE_HEAD(&stream->write_queue);
   req = QUEUE_DATA(q, uv_write_t, queue);
   assert(req->handle == stream);
-
-  printf("JBAR processing write request %p\n", req);
 
   /*
    * Cast to iovec. We had to have our own uv_buf_t instead of iovec
@@ -1000,7 +996,6 @@ start:
 	  {
             int rv, rc, rsn;
             BPX1AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-            printf("JBAR %s:%d issued write request %p\n", __FILE__,__LINE__,req);
             //printf("JBAR issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_write.aio_fildes, rv, rc, rsn);
             assert(rv==0);
 	    break;
@@ -1474,6 +1469,9 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
     uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
     uv__stream_osx_interrupt_select(stream);
   }
+  else
+    if(QUEUE_EMPTY(&stream->write_queue))
+      uv__io_feed(stream->loop, &stream->io_watcher);
 #else
   uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
   uv__stream_osx_interrupt_select(stream);

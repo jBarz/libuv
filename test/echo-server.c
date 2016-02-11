@@ -138,7 +138,7 @@ static void on_connection(uv_stream_t* server, int status) {
   uv_stream_t* stream;
   int r;
 
-printf("JBAR in on_connection\n");
+
   if (status != 0) {
     fprintf(stderr, "Connect error %s\n", uv_err_name(status));
   }
@@ -209,6 +209,8 @@ static void on_send(uv_udp_send_t* req, int status) {
 
 
 static int tcp4_echo_start(int port) {
+freopen("/home/barboza/libuv.latest/helper.log", "w", stdout);
+freopen("/home/barboza/libuv.latest/helper.err", "w", stderr);
   struct sockaddr_in addr;
   int r;
 

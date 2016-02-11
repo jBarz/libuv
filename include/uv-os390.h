@@ -42,7 +42,9 @@
     struct aiocb aio_write;							      
 
 #define UV_STREAM_PRIVATE_PLATFORM_FIELDS				      \
-    struct aiocb aio_read;
+    struct aiocb aio_read;                                                    \
+    struct aiocb aio_cancel;                                                    \
+    int aio_pending_write;                                                    \
 
 #define UV_PLATFORM_CONNECT_FIELDS				              \
     struct aiocb aio_connect;                                                 \

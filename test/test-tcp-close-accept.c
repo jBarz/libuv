@@ -49,6 +49,7 @@ static void close_cb(uv_handle_t* handle) {
 static void write_cb(uv_write_t* req, int status) {
   ASSERT(status == 0);
   write_cb_called++;
+
 }
 
 static void connect_cb(uv_connect_t* req, int status) {
@@ -113,29 +114,29 @@ static void read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
   /* Close server, so no one will connect to it */
   uv_close((uv_handle_t*) &tcp_server, close_cb);
 
-#ifdef __MVS__
-  /* Give the OS time to close server fully */
-  sleep(1);
-#endif
 }
 
 static void connection_cb(uv_stream_t* server, int status) {
   unsigned int i;
   uv_tcp_t* incoming;
 
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
   ASSERT(server == (uv_stream_t*) &tcp_server);
 
   /* Ignore tcp_check connection */
   if (got_connections == ARRAY_SIZE(tcp_incoming))
     return;
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
 
   /* Accept everyone */
   incoming = &tcp_incoming[got_connections++];
   ASSERT(0 == uv_tcp_init(server->loop, incoming));
   ASSERT(0 == uv_accept(server, (uv_stream_t*) incoming));
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
 
   if (got_connections != ARRAY_SIZE(tcp_incoming))
     return;
+printf("JBAR %s:%d\n", __FILE__, __LINE__);
 
   /* Once all clients are accepted - start reading */
   for (i = 0; i < ARRAY_SIZE(tcp_incoming); i++) {

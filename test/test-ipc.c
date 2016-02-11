@@ -314,11 +314,6 @@ static void on_tcp_write(uv_write_t* req, int status) {
   ASSERT(status == 0);
   ASSERT(req->handle == (uv_stream_t*)&tcp_connection);
   tcp_write_cb_called++;
-
-  if (tcp_read_cb_called) {
-    uv_close(req->handle, NULL);
-    uv_close((uv_handle_t*)&channel, NULL);
-  }
 }
 
 
@@ -340,10 +335,8 @@ static void on_tcp_read(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
 
   tcp_read_cb_called++;
 
-  if (tcp_write_cb_called) {
-    uv_close((uv_handle_t*)tcp, NULL);
-    uv_close((uv_handle_t*)&channel, NULL);
-  }
+  uv_close((uv_handle_t*)tcp, NULL);
+  uv_close((uv_handle_t*)&channel, NULL);
 }
 
 

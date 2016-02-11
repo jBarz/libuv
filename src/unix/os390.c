@@ -694,8 +694,11 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 		uv_stream_t* stream = container_of(watcher, uv_stream_t, io_watcher);
 		//printf("JBAR got SIG_AIO_READ\n");
 
-		if(stream->flags & UV_CLOSING)
-			return 0;  /* closed stream could have aio_read events that slip through */
+		//if(stream->flags & UV_CLOSING)
+		//	return 0;  /* closed stream could have aio_read events that slip through */
+
+		assert(stream->aio_pending_write > 0);
+		stream->aio_pending_write--;
 
 		if(stream->flags & UV_STREAM_READ_EOF)
 			flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
@@ -703,7 +706,7 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 			flags = UV__POLLIN;
 		
 		int fd = watcher->fd;
-		//printf("JBAR read callback called for fd=%d\n", fd);
+		printf("JBAR read callback called for fd=%d\n", fd);
 		watcher->cb(loop, watcher, flags);
 		return 1;
 	}
@@ -717,13 +720,16 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 
 		/* if stream is closing, we don't have to call callbacks because they have already
 		   been invoked with rc=ECANCELED */
-		if(req->handle->flags & UV_CLOSING)
+		//if(req->handle->flags & UV_CLOSING)
 			//printf("JBAR stale event\n");
-			return 0;  /* closed stream could have aio_read events that slip through */
+			//return 0;  /* closed stream could have aio_read events that slip through */
+
+		assert(req->handle->aio_pending_write > 0);
+		req->handle->aio_pending_write--;
 
 		/* move this at the head of the write queue because the callback assumes that 
 		   this event belongs to the head of the write queue */ 
-		//printf("JBAR got signal for write request %p\n", req);
+		printf("JBAR got signal for write request fd=%d\n", fd);
 		if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
 		{
 			QUEUE_REMOVE(&req->queue);

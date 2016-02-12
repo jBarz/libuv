@@ -181,7 +181,7 @@ int uv__tcp_connect(uv_connect_t* req,
     req->aio_connect.aio_sockaddrlen = addrlen;
     req->aio_connect.aio_sockaddrptr = (struct sockaddr_in*)addr;
     BPX1AIO(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
-    printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
+    //printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
     r = rv;
     if(rv != 0)
       errno = rc;
@@ -353,7 +353,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   tcp->aio_read.aio_sigevent.sigev_value.sival_ptr = &tcp->io_watcher;
   int rv, rc, rsn;
   BPX1AIO(sizeof(tcp->aio_read), &tcp->aio_read, &rv, &rc, &rsn);
-  printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_read.aio_fildes, rv, rc, rsn);
+  //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_read.aio_fildes, rv, rc, rsn);
   if (rv == -1)
     return -rc;
   else

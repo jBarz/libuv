@@ -209,8 +209,6 @@ static void on_send(uv_udp_send_t* req, int status) {
 
 
 static int tcp4_echo_start(int port) {
-freopen("/home/barboza/libuv.latest/helper.log", "w", stdout);
-freopen("/home/barboza/libuv.latest/helper.err", "w", stderr);
   struct sockaddr_in addr;
   int r;
 

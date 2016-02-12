@@ -91,7 +91,6 @@ static void alloc_cb(uv_handle_t* handle,
 
 
 static void after_write(uv_write_t* req, int status) {
-  printf("JBAR write callback called for fd=%d\n", req->handle->io_watcher.fd);
   if (status != 0) {
     fprintf(stderr, "write error %s\n", uv_err_name(status));
     uv_close((uv_handle_t*)req->handle, close_cb);
@@ -131,7 +130,6 @@ static void connect_cb(uv_connect_t* req, int status) {
   buf.base = buffer;
   buf.len = sizeof(buffer) - 1;
 
-  printf("JBAR about to write\n");
   r = uv_write(&conn->write_req, &conn->stream, &buf, 1, after_write);
   ASSERT(r == 0);
 }
@@ -145,7 +143,6 @@ static void read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
   printf("read_cb %d\n", p->i);
 #endif
 
-printf("JBAR in read_cb. About to close fd=%d\n", stream->io_watcher.fd);
   uv_close((uv_handle_t*)stream, close_cb);
 
   if (nread < 0) {

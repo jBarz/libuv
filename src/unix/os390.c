@@ -694,6 +694,7 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 		uv_stream_t* stream = container_of(watcher, uv_stream_t, io_watcher);
 		//printf("JBAR got SIG_AIO_READ\n");
 
+
 		//if(stream->flags & UV_CLOSING)
 		//	return 0;  /* closed stream could have aio_read events that slip through */
 
@@ -706,7 +707,7 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 			flags = UV__POLLIN;
 		
 		int fd = watcher->fd;
-		printf("JBAR read callback called for fd=%d\n", fd);
+		//printf("JBAR read callback called for fd=%d\n", fd);
 		watcher->cb(loop, watcher, flags);
 		return 1;
 	}
@@ -729,7 +730,7 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 
 		/* move this at the head of the write queue because the callback assumes that 
 		   this event belongs to the head of the write queue */ 
-		printf("JBAR got signal for write request fd=%d\n", fd);
+		//printf("JBAR got signal for write request fd=%d\n", fd);
 		if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
 		{
 			QUEUE_REMOVE(&req->queue);

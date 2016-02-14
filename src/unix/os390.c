@@ -695,24 +695,25 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 		//printf("JBAR got SIG_AIO_READ\n");
 
 
-		//if(stream->flags & UV_CLOSING)
-		//	return 0;  /* closed stream could have aio_read events that slip through */
 
 		assert(stream->aio_pending_write > 0);
 		stream->aio_pending_write--;
 
-		if(stream->flags & UV_STREAM_READ_EOF)
+		if (stream->flags & UV_STREAM_READ_EOF)
 			flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
+		else if ((stream->flags & UV_CLOSING) && stream->aio_pending_write == 0)
+			flags = UV__POLLHUP;
 		else
 			flags = UV__POLLIN;
 		
 		int fd = watcher->fd;
-		//printf("JBAR read callback called for fd=%d\n", fd);
+		//printf("JBAR read callback called for fd=%d pending=%d\n", fd, stream->aio_pending_write);
 		watcher->cb(loop, watcher, flags);
 		return 1;
 	}
 	else if(bSignal == SIG_AIO_WRITE && ((uv_req_t*)info.si_value.sival_ptr)->type == UV_WRITE)
 	{
+		int flags=0;
 		uv_write_t *req = (uv_write_t*)info.si_value.sival_ptr;
 		uv__io_t *watcher = &req->handle->io_watcher;
 		/* Skip invalidated events, see uv__platform_invalidate_fd */
@@ -728,15 +729,20 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 		assert(req->handle->aio_pending_write > 0);
 		req->handle->aio_pending_write--;
 
+		if ((req->handle->flags & UV_CLOSING) && req->handle->aio_pending_write == 0)
+			flags = UV__POLLHUP;
+		else
+			flags = UV__POLLOUT;
+
 		/* move this at the head of the write queue because the callback assumes that 
 		   this event belongs to the head of the write queue */ 
-		//printf("JBAR got signal for write request fd=%d\n", fd);
+		//printf("JBAR got signal for write request fd=%d pending=%d\n", fd, req->handle->aio_pending_write);
 		if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
 		{
 			QUEUE_REMOVE(&req->queue);
 			QUEUE_INSERT_HEAD(&req->handle->write_queue, &req->queue);	
 		}
-		watcher->cb(loop, watcher, UV__POLLOUT);
+		watcher->cb(loop, watcher, flags);
 		return 1;
 	}
 	else
@@ -835,7 +841,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
 		while(nfds == 0)
 		{
-			if (async_signal_check(loop, timeout == -1 ? 200 : timeout/2 )){
+			if (async_signal_check(loop, timeout == -1 ? 100 : timeout/2 )){
 				/* we processed at least 1 async io */
 				nfds = 1;
 				nevents++;
@@ -844,7 +850,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				nfds = uv__epoll_wait(loop->backend_fd,
 						events,
 						ARRAY_SIZE(events),
-						timeout == -1 ? 200 : timeout/2);
+						timeout == -1 ? 0 : timeout/2);
 			} 
 
 			if (timeout != -1 )

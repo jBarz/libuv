@@ -58,7 +58,12 @@ static void connect_cb(uv_connect_t* req, int status) {
   uv_stream_t* outgoing;
 
   if (req == &tcp_check_req) {
+#if defined(__MVS__)
+    /* zOS cleans up stale event */
+    ASSERT(status == 0);
+#else
     ASSERT(status != 0);
+#endif
 
     /*
      * Time to finish the test: close both the check and pending incoming
@@ -120,23 +125,19 @@ static void connection_cb(uv_stream_t* server, int status) {
   unsigned int i;
   uv_tcp_t* incoming;
 
-printf("JBAR %s:%d\n", __FILE__, __LINE__);
   ASSERT(server == (uv_stream_t*) &tcp_server);
 
   /* Ignore tcp_check connection */
   if (got_connections == ARRAY_SIZE(tcp_incoming))
     return;
-printf("JBAR %s:%d\n", __FILE__, __LINE__);
 
   /* Accept everyone */
   incoming = &tcp_incoming[got_connections++];
   ASSERT(0 == uv_tcp_init(server->loop, incoming));
   ASSERT(0 == uv_accept(server, (uv_stream_t*) incoming));
-printf("JBAR %s:%d\n", __FILE__, __LINE__);
 
   if (got_connections != ARRAY_SIZE(tcp_incoming))
     return;
-printf("JBAR %s:%d\n", __FILE__, __LINE__);
 
   /* Once all clients are accepted - start reading */
   for (i = 0; i < ARRAY_SIZE(tcp_incoming); i++) {

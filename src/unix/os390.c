@@ -678,75 +678,90 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 	siginfo_t       info;
 	int		bSignal;
 	struct timespec	t = {0, timeout * 1000000};	// 800 miliseconds
+	int 		nevents = 0;
 
-	bSignal = sigtimedwait(&loop->aio_sigset, &info, &t);
+	//bSignal = sigtimedwait(&loop->aio_sigset, &info, &t);
 	//printf("JBAR returned from sigtimedwait\n");
 
-	if (bSignal == -1)
-		return 0;
+//	if (bSignal == -1)
+//		return 0;
 
-	assert(bSignal == SIG_AIO_READ || bSignal == SIG_AIO_WRITE);		
 
-	if(bSignal == SIG_AIO_READ)
+	for(;;)
 	{
-		int flags=0;
-		uv__io_t *watcher = info.si_value.sival_ptr;
-		uv_stream_t* stream = container_of(watcher, uv_stream_t, io_watcher);
-		//printf("JBAR got SIG_AIO_READ\n");
-
-
-
-		assert(stream->aio_pending_write > 0);
-		stream->aio_pending_write--;
-
-		if (stream->flags & UV_STREAM_READ_EOF)
-			flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
-		else if ((stream->flags & UV_CLOSING) && stream->aio_pending_write == 0)
-			flags = UV__POLLHUP;
+		bSignal = sigtimedwait(&loop->aio_sigset, &info, &t);
+		if (bSignal == -1)
+		  break;
 		else
-			flags = UV__POLLIN;
-		
-		int fd = watcher->fd;
-		//printf("JBAR read callback called for fd=%d pending=%d\n", fd, stream->aio_pending_write);
-		watcher->cb(loop, watcher, flags);
-		return 1;
-	}
-	else if(bSignal == SIG_AIO_WRITE && ((uv_req_t*)info.si_value.sival_ptr)->type == UV_WRITE)
-	{
-		int flags=0;
-		uv_write_t *req = (uv_write_t*)info.si_value.sival_ptr;
-		uv__io_t *watcher = &req->handle->io_watcher;
-		/* Skip invalidated events, see uv__platform_invalidate_fd */
-		int fd = req->aio_write.aio_fildes;
-		//printf("JBAR got SIG_AIO_WRITE for handle %p fd=%d\n", req->handle, fd);
+                  t.tv_nsec = 0;		// do not wait for further signals
 
-		/* if stream is closing, we don't have to call callbacks because they have already
-		   been invoked with rc=ECANCELED */
-		//if(req->handle->flags & UV_CLOSING)
-			//printf("JBAR stale event\n");
-			//return 0;  /* closed stream could have aio_read events that slip through */
+		assert(bSignal == SIG_AIO_READ || bSignal == SIG_AIO_WRITE);		
+		++nevents;
 
-		assert(req->handle->aio_pending_write > 0);
-		req->handle->aio_pending_write--;
-
-		if ((req->handle->flags & UV_CLOSING) && req->handle->aio_pending_write == 0)
-			flags = UV__POLLHUP;
-		else
-			flags = UV__POLLOUT;
-
-		/* move this at the head of the write queue because the callback assumes that 
-		   this event belongs to the head of the write queue */ 
-		//printf("JBAR got signal for write request fd=%d pending=%d\n", fd, req->handle->aio_pending_write);
-		if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
+		if(bSignal == SIG_AIO_READ)
 		{
-			QUEUE_REMOVE(&req->queue);
-			QUEUE_INSERT_HEAD(&req->handle->write_queue, &req->queue);	
+			int flags=0;
+			uv__io_t *watcher = info.si_value.sival_ptr;
+			uv_stream_t* stream = container_of(watcher, uv_stream_t, io_watcher);
+			//printf("JBAR got SIG_AIO_READ\n");
+
+
+
+			assert(stream->aio_pending_write > 0);
+			stream->aio_pending_write--;
+
+			if (stream->flags & UV_STREAM_READ_EOF)
+				flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
+			else if ((stream->flags & UV_CLOSING) && stream->aio_pending_write == 0)
+				flags = UV__POLLHUP;
+			else
+				flags = UV__POLLIN;
+			
+			int fd = watcher->fd;
+			//printf("JBAR read callback called for fd=%d pending=%d\n", fd, stream->aio_pending_write);
+			watcher->cb(loop, watcher, flags);
+			continue;
 		}
-		watcher->cb(loop, watcher, flags);
-		return 1;
+		else if(bSignal == SIG_AIO_WRITE && ((uv_req_t*)info.si_value.sival_ptr)->type == UV_WRITE)
+		{
+			int flags=0;
+			uv_write_t *req = (uv_write_t*)info.si_value.sival_ptr;
+			uv__io_t *watcher = &req->handle->io_watcher;
+			/* Skip invalidated events, see uv__platform_invalidate_fd */
+			int fd = req->aio_write.aio_fildes;
+			//printf("JBAR got SIG_AIO_WRITE for handle %p fd=%d\n", req->handle, fd);
+
+			/* if stream is closing, we don't have to call callbacks because they have already
+			   been invoked with rc=ECANCELED */
+			//if(req->handle->flags & UV_CLOSING)
+				//printf("JBAR stale event\n");
+				//return 0;  /* closed stream could have aio_read events that slip through */
+
+			assert(req->handle->aio_pending_write > 0);
+			req->handle->aio_pending_write--;
+
+			if ((req->handle->flags & UV_CLOSING) && req->handle->aio_pending_write == 0)
+				flags = UV__POLLHUP;
+			else
+				flags = UV__POLLOUT;
+
+			/* move this at the head of the write queue because the callback assumes that 
+			   this event belongs to the head of the write queue */ 
+			//printf("JBAR got signal for write request fd=%d pending=%d\n", fd, req->handle->aio_pending_write);
+			if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
+			{
+				QUEUE_REMOVE(&req->queue);
+				QUEUE_INSERT_HEAD(&req->handle->write_queue, &req->queue);	
+			}
+			watcher->cb(loop, watcher, flags);
+			continue;
+		}
+		else
+			assert(0 && "unexpected signal\n");
+
 	}
-	else
-		assert(0 && "unexpected signal\n");
+
+	return nevents;
 
 
 }
@@ -841,7 +856,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
 		while(nfds == 0)
 		{
-			if (async_signal_check(loop, timeout == -1 ? 100 : timeout/2 )){
+			if (async_signal_check(loop, timeout == -1 ? 200 : timeout/2 )){
 				/* we processed at least 1 async io */
 				nfds = 1;
 				nevents++;

@@ -1978,8 +1978,8 @@ int uv_read_stop(uv_stream_t* stream) {
   stream->flags &= ~UV_STREAM_READING;
 
 #if defined(__MVS__)
-  if (stream->type == UV_TCP) {
-    if (stream->aio_pending_write != 0) {
+  if (stream->type == UV_TCP && !(stream->flags & UV_CLOSING)) {
+    if (stream->aio_pending_write > 0) {
       memset(&stream->aio_cancel, 0, sizeof(struct aiocb));
       stream->aio_cancel.aio_fildes = uv__stream_fd(stream);
       stream->aio_cancel.aio_notifytype = AIO_POSIX;
@@ -1988,8 +1988,8 @@ int uv_read_stop(uv_stream_t* stream) {
       stream->aio_cancel.aio_sigevent.sigev_signo = SIG_AIO_READ;
       stream->aio_cancel.aio_sigevent.sigev_value.sival_ptr = &stream->io_watcher;
       int rv, rc, rsn;
-      BPX1AIO(sizeof(stream->aio_cancel), &stream->aio_cancel, &rv, &rc, &rsn);
-      //printf("JBAR:%d issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_cancel.aio_fildes, rv, rc, rsn);
+      BPX1AIO(sizeof(stream->aio_cancel), &stream->aio_read, &rv, &rc, &rsn);
+      //printf("JBAR:%d issued aio_cancel (read) for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_cancel.aio_fildes, rv, rc, rsn);
     }
   }
   else

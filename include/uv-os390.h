@@ -24,8 +24,15 @@
 
 #define _AIO_OS390
 #include <aio.h>
-#define SIG_AIO_READ  SIGUSR1           /* Signal used for aio_read            */
-#define SIG_AIO_WRITE SIGUSR2		/* Signal used for aio_write           */
+#include <sys/msg.h>
+
+#define AIO_MSG_READ 1
+#define AIO_MSG_WRITE 2
+
+struct AioMsg{         /* The I/O Complete Message                */
+        long int mm_type;   /* Msg type: used for type of I/O    */
+        void *mm_ptr; /* Msg text: identifies the client   */
+};
 
 
 #define UV_PLATFORM_FS_EVENT_FIELDS                                           \
@@ -33,21 +40,25 @@
   int wd;                                                                     \
 
 #define UV_PLATFORM_LOOP_FIELDS                                               \
-  sigset_t aio_sigset;
+    int msgqid;							      \
 
 #define UV_TCP_PRIVATE_PLATFORM_FIELDS                                        \
     int is_bound;							      \
 
 #define UV_PLATFORM_WRITE_FIELDS                                              \
-    struct aiocb aio_write;							      
+    struct aiocb aio_write;                                                   \
+    struct AioMsg aio_write_msg;                                               \
 
 #define UV_STREAM_PRIVATE_PLATFORM_FIELDS				      \
     struct aiocb aio_read;                                                    \
     struct aiocb aio_cancel;                                                    \
-    int aio_pending_write;                                                    \
+    struct AioMsg aio_read_msg;                                               \
+    struct AioMsg aio_cancel_msg;                                            \
+    int aio_pending;                                                          \
 
 #define UV_PLATFORM_CONNECT_FIELDS				              \
     struct aiocb aio_connect;                                                 \
+    struct AioMsg aio_connect_msg;                                            \
 
 #define UV_IO_PRIVATE_PLATFORM_FIELDS					      \
     struct aiocb *aio_read, *aio_write;

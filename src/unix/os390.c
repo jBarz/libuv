@@ -290,10 +290,21 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 	if (fd == -1)
 		return -errno;
 
-        sigemptyset(&loop->aio_sigset);
-        sigaddset(&loop->aio_sigset,SIG_AIO_READ);
-        sigaddset(&loop->aio_sigset,SIG_AIO_WRITE);
-        sigprocmask(SIG_BLOCK,&loop->aio_sigset,NULL);
+        loop->msgqid = msgget( IPC_PRIVATE, IPC_CREAT + S_IRUSR + S_IWUSR );
+	printf("JBAR new msgqid=%d\n", loop->msgqid);
+
+#if 0
+	ssize_t DrainRV = 0;
+	int DrainedType;
+	while (DrainRV != -1) {
+	printf("JBAR draining queue\n");
+                        DrainRV = msgrcv( loop->msgqid,
+                                        &DrainedType,
+                                        0,            /* Recv just the type field  */
+                                        0,            /* Receive any type message  */
+                                        IPC_NOWAIT + MSG_NOERROR ); /* Don't wait  */
+	}
+#endif
 
 	return 0;
 }
@@ -674,9 +685,8 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
 
 int async_signal_check(uv_loop_t* loop, int timeout) {
 
-	sigset_t 	aio_completion_signals;
-	siginfo_t       info;
-	int		bSignal;
+	struct AioMsg msgin;
+	int msglen;
 	struct timespec	t = {0, timeout * 1000000};	// 800 miliseconds
 	int 		nevents = 0;
 
@@ -689,47 +699,47 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 
 	for(;;)
 	{
-		bSignal = sigtimedwait(&loop->aio_sigset, &info, &t);
-		if (bSignal == -1)
+		memset(&msgin, 0, sizeof(struct AioMsg));
+		msglen = __msgrcv_timed(loop->msgqid, &msgin, sizeof(msgin.mm_ptr), 0, 0, &t);
+		//printf("JBAR msgrcv_timed returned %d type = %d\n", msglen, msgin.mm_type);
+		if (msglen == -1)
 		  break;
 		else
-                  t.tv_nsec = 0;		// do not wait for further signals
+                  t.tv_nsec = 0;		// do not wait for further messages 
 
-		assert(bSignal == SIG_AIO_READ || bSignal == SIG_AIO_WRITE);		
+		assert(msgin.mm_type == AIO_MSG_READ || msgin.mm_type == AIO_MSG_WRITE);		
 		++nevents;
 
-		if(bSignal == SIG_AIO_READ)
+		if(msgin.mm_type == AIO_MSG_READ)
 		{
 			int flags=0;
-			uv__io_t *watcher = info.si_value.sival_ptr;
+			uv__io_t *watcher = (uv__io_t*)msgin.mm_ptr;
 			uv_stream_t* stream = container_of(watcher, uv_stream_t, io_watcher);
-			//printf("JBAR got SIG_AIO_READ\n");
+			//printf("JBAR got AIO_MSG_READ\n");
 
-
-
-			assert(stream->aio_pending_write > 0);
-			stream->aio_pending_write--;
+			assert(stream->aio_pending > 0);
+			stream->aio_pending--;
 
 			if (stream->flags & UV_STREAM_READ_EOF)
 				flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
-			else if ((stream->flags & UV_CLOSING) && stream->aio_pending_write == 0)
+			else if ((stream->flags & UV_CLOSING) && stream->aio_pending == 0)
 				flags = UV__POLLHUP;
 			else
 				flags = UV__POLLIN;
 			
 			int fd = watcher->fd;
-			//printf("JBAR read callback called for fd=%d pending=%d\n", fd, stream->aio_pending_write);
+			//printf("JBAR read callback called for fd=%d pending=%d\n", fd, stream->aio_pending);
 			watcher->cb(loop, watcher, flags);
 			continue;
 		}
-		else if(bSignal == SIG_AIO_WRITE && ((uv_req_t*)info.si_value.sival_ptr)->type == UV_WRITE)
+		else if(msgin.mm_type == AIO_MSG_WRITE && ((uv_req_t*)msgin.mm_ptr)->type == UV_WRITE)
 		{
 			int flags=0;
-			uv_write_t *req = (uv_write_t*)info.si_value.sival_ptr;
+			uv_write_t *req = (uv_write_t*)msgin.mm_ptr;
 			uv__io_t *watcher = &req->handle->io_watcher;
 			/* Skip invalidated events, see uv__platform_invalidate_fd */
 			int fd = req->aio_write.aio_fildes;
-			//printf("JBAR got SIG_AIO_WRITE for handle %p fd=%d\n", req->handle, fd);
+			//printf("JBAR got AIO_MSG_WRITE for handle %p fd=%d\n", req->handle, fd);
 
 			/* if stream is closing, we don't have to call callbacks because they have already
 			   been invoked with rc=ECANCELED */
@@ -737,17 +747,17 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 				//printf("JBAR stale event\n");
 				//return 0;  /* closed stream could have aio_read events that slip through */
 
-			assert(req->handle->aio_pending_write > 0);
-			req->handle->aio_pending_write--;
+			assert(req->handle->aio_pending > 0);
+			req->handle->aio_pending--;
 
-			if ((req->handle->flags & UV_CLOSING) && req->handle->aio_pending_write == 0)
+			if ((req->handle->flags & UV_CLOSING) && req->handle->aio_pending == 0)
 				flags = UV__POLLHUP;
 			else
 				flags = UV__POLLOUT;
 
 			/* move this at the head of the write queue because the callback assumes that 
 			   this event belongs to the head of the write queue */ 
-			//printf("JBAR got signal for write request fd=%d pending=%d\n", fd, req->handle->aio_pending_write);
+			//printf("JBAR callback called for write request fd=%d pending=%d\n", fd, req->handle->aio_pending);
 			if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
 			{
 				QUEUE_REMOVE(&req->queue);
@@ -757,7 +767,9 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 			continue;
 		}
 		else
-			assert(0 && "unexpected signal\n");
+			assert(0 && "unexpected message\n");
+
+
 
 	}
 
@@ -865,7 +877,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				nfds = uv__epoll_wait(loop->backend_fd,
 						events,
 						ARRAY_SIZE(events),
-						timeout == -1 ? 0 : timeout/2);
+						timeout == -1 ? 0 : timeout/6);
 			} 
 
 			if (timeout != -1 )

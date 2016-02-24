@@ -291,7 +291,10 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 		return -errno;
 
         loop->msgqid = msgget( IPC_PRIVATE, IPC_CREAT + S_IRUSR + S_IWUSR );
-	printf("JBAR new msgqid=%d\n", loop->msgqid);
+	//printf("JBAR new msgqid=%d\n", loop->msgqid);
+
+        int events = EPOLLIN;	
+	uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_ADD_MSGQ, loop->msgqid, &events);
 
 #if 0
 	ssize_t DrainRV = 0;
@@ -683,11 +686,8 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
 	}
 }
 
-int async_signal_check(uv_loop_t* loop, int timeout) {
+int async_message(uv_loop_t* loop) {
 
-	struct AioMsg msgin;
-	int msglen;
-	struct timespec	t = {0, timeout * 1000000};	// 800 miliseconds
 	int 		nevents = 0;
 
 	//bSignal = sigtimedwait(&loop->aio_sigset, &info, &t);
@@ -699,13 +699,14 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 
 	for(;;)
 	{
+	        struct AioMsg msgin;
+	        int msglen;
+
 		memset(&msgin, 0, sizeof(struct AioMsg));
-		msglen = __msgrcv_timed(loop->msgqid, &msgin, sizeof(msgin.mm_ptr), 0, 0, &t);
-		//printf("JBAR msgrcv_timed returned %d type = %d\n", msglen, msgin.mm_type);
+		msglen = msgrcv(loop->msgqid, &msgin, sizeof(msgin.mm_ptr), 0, IPC_NOWAIT );
+		//printf("JBAR msgrcv returned %d type = %d\n", msglen, msgin.mm_type);
 		if (msglen == -1)
-		  break;
-		else
-                  t.tv_nsec = 0;		// do not wait for further messages 
+		  return nevents;
 
 		assert(msgin.mm_type == AIO_MSG_READ || msgin.mm_type == AIO_MSG_WRITE);		
 		++nevents;
@@ -773,7 +774,6 @@ int async_signal_check(uv_loop_t* loop, int timeout) {
 
 	}
 
-	return nevents;
 
 
 }
@@ -855,10 +855,10 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 	base = loop->time;
 	count = 48; /* Benchmarks suggest this gives the best throughput. */
 	real_timeout = timeout;
+	int nevents = 0;
 
 	for (;;) {
 
-		int nevents = 0;
 
 		/* See the comment for max_safe_timeout for an explanation of why
 		 * this is necessary.  Executive summary: kernel bug workaround.
@@ -866,23 +866,10 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 		if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
 			timeout = max_safe_timeout;
 
-		while(nfds == 0)
-		{
-			if (async_signal_check(loop, timeout == -1 ? 200 : timeout/2 )){
-				/* we processed at least 1 async io */
-				nfds = 1;
-				nevents++;
-				continue;
-			} else {
-				nfds = uv__epoll_wait(loop->backend_fd,
-						events,
-						ARRAY_SIZE(events),
-						timeout == -1 ? 0 : timeout/6);
-			} 
-
-			if (timeout != -1 )
-				break;
-		}
+		nfds = uv__epoll_wait(loop->backend_fd,
+				events,
+				ARRAY_SIZE(events),
+				timeout);
 
 		/* Update loop->time unconditionally. It's tempting to skip the update when
 		 * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
@@ -919,68 +906,71 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 		}
 
 
-		if (nevents == 0) 	// This means we haven't processed any async io in this iteration */
-		{
-			assert(loop->watchers != NULL);
-			loop->watchers[loop->nwatchers] = (void*) events;
-			loop->watchers[loop->nwatchers + 1] = (void*) (uintptr_t) nfds;
-			for (i = 0; i < nfds; i++) {
-				pe = events + i;
-				fd = pe->data;
+		assert(loop->watchers != NULL);
+		loop->watchers[loop->nwatchers] = (void*) events;
+		loop->watchers[loop->nwatchers + 1] = (void*) (uintptr_t) nfds;
+		for (i = 0; i < nfds; i++) {
+			pe = events + i;
+			fd = pe->data;
 
-				/* Skip invalidated events, see uv__platform_invalidate_fd */
-				if (fd == -1)
-					continue;
+			/* Skip invalidated events, see uv__platform_invalidate_fd */
+			if (fd == -1)
+				continue;
 
-				assert(fd >= 0);
-				assert((unsigned) fd < loop->nwatchers);
-
-				w = loop->watchers[fd];
-
-				if (w == NULL) {
-					/* File descriptor that we've stopped watching, disarm it.
-					 *
-					 * Ignore all errors because we may be racing with another thread
-					 * when the file descriptor is closed.
-					 */
-					uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, pe);
-					continue;
-				}
-
-				/* Give users only events they're interested in. Prevents spurious
-				 * callbacks when previous callback invocation in this loop has stopped
-				 * the current watcher. Also, filters out events that users has not
-				 * requested us to watch.
-				 */
-				pe->events &= w->pevents | UV__POLLERR | UV__POLLHUP;
-
-				/* Work around an epoll quirk where it sometimes reports just the
-				 * EPOLLERR or EPOLLHUP event.  In order to force the event loop to
-				 * move forward, we merge in the read/write events that the watcher
-				 * is interested in; uv__read() and uv__write() will then deal with
-				 * the error or hangup in the usual fashion.
-				 *
-				 * Note to self: happens when epoll reports EPOLLIN|EPOLLHUP, the user
-				 * reads the available data, calls uv_read_stop(), then sometime later
-				 * calls uv_read_start() again.  By then, libuv has forgotten about the
-				 * hangup and the kernel won't report EPOLLIN again because there's
-				 * nothing left to read.  If anything, libuv is to blame here.  The
-				 * current hack is just a quick bandaid; to properly fix it, libuv
-				 * needs to remember the error/hangup event.  We should get that for
-				 * free when we switch over to edge-triggered I/O.
-				 */
-				if (pe->events == UV__EPOLLERR || pe->events == UV__EPOLLHUP)
-					pe->events |= w->pevents & (UV__EPOLLIN | UV__EPOLLOUT);
-
-				//printf("JBAR calling sync cb fd=%d\n", fd);
-				if (pe->events != 0) {
-					w->cb(loop, w, pe->events);
-					nevents++;
-				}
+			if (fd == loop->msgqid) {
+				//printf("JBAR got message\n");
+				nevents += async_message(loop);
+				continue;
 			}
-			loop->watchers[loop->nwatchers] = NULL;
-			loop->watchers[loop->nwatchers + 1] = NULL;
+
+			assert(fd >= 0);
+			assert((unsigned) fd < loop->nwatchers);
+
+			w = loop->watchers[fd];
+
+			if (w == NULL) {
+				/* File descriptor that we've stopped watching, disarm it.
+				 *
+				 * Ignore all errors because we may be racing with another thread
+				 * when the file descriptor is closed.
+				 */
+				uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, pe);
+				continue;
+			}
+
+			/* Give users only events they're interested in. Prevents spurious
+			 * callbacks when previous callback invocation in this loop has stopped
+			 * the current watcher. Also, filters out events that users has not
+			 * requested us to watch.
+			 */
+			pe->events &= w->pevents | UV__POLLERR | UV__POLLHUP;
+
+			/* Work around an epoll quirk where it sometimes reports just the
+			 * EPOLLERR or EPOLLHUP event.  In order to force the event loop to
+			 * move forward, we merge in the read/write events that the watcher
+			 * is interested in; uv__read() and uv__write() will then deal with
+			 * the error or hangup in the usual fashion.
+			 *
+			 * Note to self: happens when epoll reports EPOLLIN|EPOLLHUP, the user
+			 * reads the available data, calls uv_read_stop(), then sometime later
+			 * calls uv_read_start() again.  By then, libuv has forgotten about the
+			 * hangup and the kernel won't report EPOLLIN again because there's
+			 * nothing left to read.  If anything, libuv is to blame here.  The
+			 * current hack is just a quick bandaid; to properly fix it, libuv
+			 * needs to remember the error/hangup event.  We should get that for
+			 * free when we switch over to edge-triggered I/O.
+			 */
+			if (pe->events == UV__EPOLLERR || pe->events == UV__EPOLLHUP)
+				pe->events |= w->pevents & (UV__EPOLLIN | UV__EPOLLOUT);
+
+			//printf("JBAR calling sync cb fd=%d\n", fd);
+			if (pe->events != 0) {
+				w->cb(loop, w, pe->events);
+				nevents++;
+			}
 		}
+		loop->watchers[loop->nwatchers] = NULL;
+		loop->watchers[loop->nwatchers + 1] = NULL;
 
 		if (nevents != 0) {
 			if (nfds == ARRAY_SIZE(events) && --count != 0) {

@@ -5,11 +5,12 @@
 #include <poll.h>
 #include <pthread.h>
 
-#define EPOLL_CTL_ADD 1
-#define EPOLL_CTL_DEL 2
-#define EPOLL_CTL_MOD 3
-#define MAX_EPOLL_INSTANCES 256
-#define MAX_ITEMS_PER_EPOLL 1024
+#define EPOLL_CTL_ADD 		1
+#define EPOLL_CTL_DEL 		2
+#define EPOLL_CTL_MOD 		3
+#define EPOLL_CTL_ADD_MSGQ 	4
+#define MAX_EPOLL_INSTANCES 	256
+#define MAX_ITEMS_PER_EPOLL 	1024
 
 enum EPOLL_EVENTS
 {
@@ -53,8 +54,9 @@ struct epoll_event {
 };
 
 struct _epoll_list{
-   int size;
    struct pollfd items[MAX_ITEMS_PER_EPOLL];
+   struct pollmsg aio;
+   int size;
    pthread_mutex_t lock;
 };
 

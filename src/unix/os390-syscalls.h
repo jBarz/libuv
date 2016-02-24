@@ -8,6 +8,7 @@
 #define UV__EPOLL_CTL_ADD     1
 #define UV__EPOLL_CTL_DEL     2
 #define UV__EPOLL_CTL_MOD     3
+#define UV__EPOLL_CTL_ADD_MSGQ    4
 
 #define UV__EPOLLIN           1
 #define UV__EPOLLOUT          4

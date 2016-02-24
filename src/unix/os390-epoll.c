@@ -18,7 +18,7 @@ static int _removefd(struct _epoll_list *lst, int fd)
 
         if (deletion_point < lst->size)                         
         {                                                                  
-            for (int i = deletion_point; i < lst->size; ++i)    
+            for (int i = deletion_point; i < lst->size + 1; ++i)    
             {                                                              
                 lst->items[i] = lst->items[i+1];
             }                                                              
@@ -46,6 +46,7 @@ static int _doesExist(struct _epoll_list *lst, int fd, int *index)
 static void _modify(struct _epoll_list *lst, int index, struct epoll_event events)
 {
 	struct pollfd *i = &lst->items[index];
+        i->events = 0;
         if(events.events & EPOLLIN)
             i->events |= POLLIN; 
         if(events.events & EPOLLOUT)
@@ -58,11 +59,17 @@ static void _modify(struct _epoll_list *lst, int index, struct epoll_event event
 
 static int _append(struct _epoll_list *lst, int fd, struct epoll_event events)
 {
-	if (lst->size == MAX_ITEMS_PER_EPOLL)
+	if (lst->size == MAX_ITEMS_PER_EPOLL - 1)
 		return ENOMEM;
+
+	// remember, lst->size contains the msgq
+	lst->items[lst->size+1].fd = lst->items[lst->size].fd;
+	lst->items[lst->size+1].events = lst->items[lst->size].events; 
+
 	lst->items[lst->size].fd = fd;
 	_modify(lst, lst->size, events); 
 	++lst->size;
+
 	return 0;
 }
 
@@ -87,7 +94,14 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
             return ENOENT;
             //printf("log: removed fd %d\n", fd);
     }
-
+    else if(op == EPOLL_CTL_ADD_MSGQ)
+    {
+	pthread_mutex_lock(&lst->lock);
+	lst->items[lst->size].fd = fd;
+	lst->items[lst->size].events = POLLIN ;
+	pthread_mutex_unlock(&lst->lock);
+	return 0;
+    }
     else if(op == EPOLL_CTL_ADD)
     {
         int index;
@@ -131,19 +145,23 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
     struct _epoll_list *lst = (struct _epoll_list*)epfd;
 
-    //printf("log: poll args %d, %d \n", lst->size, timeout);
+    unsigned int size;
+    _SET_FDS_MSGS(size, 1, lst->size);
+    //printf("log: poll args size=%u, timeout=%d \n", size, timeout);
+
     struct pollfd *pfds = lst->items;
-    //for (int i = 0; i < lst->size && i < maxevents; ++i)
+    //for (int i = 0; i < lst->size + 1 && i < maxevents; ++i)
       //printf("log: fd=%d events=%d\n", pfds[i].fd, pfds[i].events);
-    int returnval = poll( pfds, lst->size, timeout );
-    //printf("log: poll args %d, %d returns %d errno %d\n", lst->size, timeout, returnval, errno);
+    int returnval = poll( pfds, size, timeout );
+    //printf("log: poll args size %u, %d returns %d errno %d\n", size, timeout, returnval, errno);
     if(returnval == -1)
         return returnval;
     else
-        returnval = _NFDS(returnval);
+        returnval = _NFDS(returnval) + _NMSGS(returnval);
 
     int reventcount=0;
-    for (int i = 0; i < lst->size && i < maxevents; ++i)                     
+    // size + 1 will include the msgq
+    for (int i = 0; i < lst->size + 1 && i < maxevents; ++i)                     
     {
         struct epoll_event ev = { 0, 0 };
         //printf("log: fd=%d revents=%d\n", pfds[i].fd, pfds[i].revents);
@@ -173,6 +191,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
             //printf("log: fd %d not available anymore\n", ev.data.fd);
         }
 
+	pfds[i].revents = 0;
         events[reventcount++] = ev; 
             
     }

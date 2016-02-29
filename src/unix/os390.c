@@ -293,6 +293,9 @@ int uv__platform_loop_init(uv_loop_t* loop) {
         loop->msgqid = msgget( IPC_PRIVATE, IPC_CREAT + S_IRUSR + S_IWUSR );
 	//printf("JBAR new msgqid=%d\n", loop->msgqid);
 
+	if (loop->msgqid == -1)
+		return -errno;
+
         int events = EPOLLIN;	
 	uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_ADD_MSGQ, loop->msgqid, &events);
 
@@ -315,6 +318,8 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 
 
 void uv__platform_loop_delete(uv_loop_t* loop) {
+        msgctl(loop->msgqid, IPC_RMID, NULL);
+	//printf("JBAR deleted msgqid=%d errno=%d\n", loop->msgqid, errno);
 }
 
 

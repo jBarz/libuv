@@ -549,44 +549,11 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(events == POLLIN);
 
 #if defined(__MVS__)
-  int aio_accept_err=-1;
-  if(stream->type == UV_TCP) {
-    /* capture error state of the prior aio accept */
-    aio_accept_err = aio_error(&stream->aio_read);
-    if(aio_accept_err ==  0)
-      aio_accept_err = aio_return(&stream->aio_read);
-    else
-      aio_accept_err = -aio_accept_err;
-    //int aio_accept_err = stream->aio_read.aio_rv < 0 ? -stream->aio_read.aio_rc : stream->aio_read.aio_rv;
-  }
-#endif
-
-
-#if defined(__MVS__)
-  if(stream->type == UV_TCP) {
-    if(!(stream->flags & UV_CLOSING)) {
-      /* start polling for next connection */
-      memset(&stream->aio_read, 0, sizeof(struct aiocb));
-      stream->aio_read.aio_fildes = stream->io_watcher.fd;
-      stream->aio_read.aio_notifytype = AIO_MSGQ;
-      stream->aio_read.aio_cmd = AIO_ACCEPT;
-      stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
-      stream->aio_read_msg.mm_type = AIO_MSG_READ;
-      stream->aio_read_msg.mm_ptr = &stream->io_watcher;
-      stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
-      stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
-      int rv, rc, rsn;
-      BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-      //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
-      assert(rv==0);
-      ++stream->aio_pending;
-    }
-  }
-  else
-    uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
- 
+  int is_next_connection_available = 1;
+  if(stream->type != UV_TCP)
+    uv__io_start(stream->loop, &stream->io_watcher, UV__POLLIN);
 #else
-  uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
+  uv__io_start(stream->loop, &stream->io_watcher, UV__POLLIN);
 #endif
 
   /* connection_cb can close the server socket while we're
@@ -601,7 +568,45 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 #endif /* defined(UV_HAVE_KQUEUE) */
 
 #if defined(__MVS__)
-//printf("JBAR before connection_cb aio_accept_err=%d\n", aio_accept_err);
+    if((stream->type == UV_TCP) && !is_next_connection_available)
+      break;
+
+    int aio_accept_err=-1;
+    if(stream->type == UV_TCP) {
+    /* capture error state of the prior aio accept */
+      aio_accept_err = aio_error(&stream->aio_read);
+      if(aio_accept_err ==  0)
+        aio_accept_err = aio_return(&stream->aio_read);
+      else
+        aio_accept_err = -aio_accept_err;
+    }
+ 
+    /* we know that a connection is availble for accept. 
+       start polling for the next connection */
+    if((stream->type == UV_TCP) && !(stream->flags & UV_CLOSING)) {
+      memset(&stream->aio_read, 0, sizeof(struct aiocb));
+      stream->aio_read.aio_fildes = stream->io_watcher.fd;
+      stream->aio_read.aio_notifytype = AIO_MSGQ;
+      stream->aio_read.aio_cmd = AIO_ACCEPT;
+      stream->aio_read.aio_cflags |= AIO_OK2COMPIMD;
+      stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
+      stream->aio_read_msg.mm_type = AIO_MSG_READ;
+      stream->aio_read_msg.mm_ptr = &stream->io_watcher;
+      stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
+      stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
+      int rv, rc, rsn;
+      BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+      //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
+      assert(rv >= 0);
+      if(rv == 0) {
+	/* next connection is not immediately available */
+	/* so after processing the current connection, it will break out of the loop */
+	/* We will get a message notification for anything new */
+        is_next_connection_available = 0;
+        ++stream->aio_pending;
+      }
+    }
+
     if(stream->type == UV_TCP)
       err = aio_accept_err;
     else
@@ -614,9 +619,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
         return;  /* Not an error. */
 
       if (err == -ECONNABORTED)
-#if defined(__MVS__)
-        break;
-#endif
         continue;  /* Ignore. Nothing we can do about that. */
 
       if (err == -EMFILE || err == -ENFILE) {
@@ -626,9 +628,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       }
 
       stream->connection_cb(stream, err);
-#if defined(__MVS__)
-      break;
-#endif
       continue;
     }
 
@@ -653,12 +652,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       struct timespec timeout = { 0, 1 };
       usleep(1);
     }
-
-#if defined(__MVS__)
-    /* This accept loop is useless. We want to wait for aio signal for the next accept */
-    break;
-#endif
-
   }
 }
 
@@ -1453,41 +1446,49 @@ static void uv__read(uv_stream_t* stream) {
       }
       stream->read_cb(stream, nread, &buf);
 
+#if defined(__MVS__)
+      /* Continue to read */
+      if(stream->type == UV_TCP && !(stream->flags & UV_CLOSING) && (stream->flags & UV_STREAM_READING))
+      {
+        memset(&stream->aio_read, 0, sizeof(struct aiocb));
+        stream->aio_read.aio_fildes = uv__stream_fd(stream);
+        stream->aio_read.aio_notifytype = AIO_MSGQ;
+        stream->aio_read.aio_cmd = AIO_READ;
+        stream->aio_read.aio_cflags |= AIO_OK2COMPIMD;
+        stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
+        stream->aio_read_msg.mm_type = AIO_MSG_READ;
+        stream->aio_read_msg.mm_ptr = &stream->io_watcher;
+        stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
+        stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
+        stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
+        stream->aio_read.aio_buf = buf.base;
+        stream->aio_read.aio_offset = 0;
+        stream->aio_read.aio_nbytes = buf.len;
+        if (buf.len == 0) {
+          /* User indicates it can't or won't handle the read. */
+          stream->read_cb(stream, UV_ENOBUFS, &buf);
+          return;
+        }
+
+        int rv, rc, rsn;
+        BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+        //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);
+        if(rv < 0) {
+          stream->read_cb(stream, -rc, &buf);
+          return;
+        }
+
+        if(rv == 1)
+          continue; /* continue to read because it returned immediately */
+
+        ++stream->aio_pending;
+	// wait for io notification
+      }
+#endif
+
       /* Return if we didn't fill the buffer, there is no more data to read. */
       if (nread < buflen) {
         stream->flags |= UV_STREAM_READ_PARTIAL;
-
-#if defined(__MVS__)
-        /* Continue to read */
-        if(stream->type == UV_TCP && !(stream->flags & UV_CLOSING) && (stream->flags & UV_STREAM_READING))
-        {
-          memset(&stream->aio_read, 0, sizeof(struct aiocb));
-          stream->aio_read.aio_fildes = uv__stream_fd(stream);
-          stream->aio_read.aio_notifytype = AIO_MSGQ;
-          stream->aio_read.aio_cmd = AIO_READ;
-          stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
-          stream->aio_read_msg.mm_type = AIO_MSG_READ;
-          stream->aio_read_msg.mm_ptr = &stream->io_watcher;
-          stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
-          stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
-          stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
-          stream->aio_read.aio_buf = buf.base;
-          stream->aio_read.aio_offset = 0;
-          stream->aio_read.aio_nbytes = buf.len;
-          if (buf.len == 0) {
-            /* User indicates it can't or won't handle the read. */
-            stream->read_cb(stream, UV_ENOBUFS, &buf);
-            return;
-          }
-
-          int rv, rc, rsn;
-          BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-          //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);
-          assert(rv==0);
-          ++stream->aio_pending;
-        }
-#endif
-
         return;
       }
     }
@@ -1647,14 +1648,27 @@ static void uv__stream_connect(uv_stream_t* stream) {
     error = stream->delayed_error;
     stream->delayed_error = 0;
   } else {
-    /* Normal situation: we need to get the socket error from the kernel. */
 #if defined(__MVS__)
-    error = aio_error(&req->aio_connect);
-    if(error ==  0)
-      error = aio_return(&req->aio_connect);
-    else
+    if(stream->type == UV_TCP) {
+      free(req->aio_connect.aio_sockaddrptr);
+      error = aio_error(&req->aio_connect);
+      if(error ==  0)
+        error = aio_return(&req->aio_connect);
+      else
+        error = -error;
+    }
+    else {
+    /* Normal situation: we need to get the socket error from the kernel. */
+      assert(uv__stream_fd(stream) >= 0);
+      assert(0 == getsockopt(uv__stream_fd(stream),
+               SOL_SOCKET,
+               SO_ERROR,
+               &error,
+               &errorsize));
       error = -error;
+    }
 #else
+    /* Normal situation: we need to get the socket error from the kernel. */
     assert(uv__stream_fd(stream) >= 0);
     assert(0 == getsockopt(uv__stream_fd(stream),
                SOL_SOCKET,

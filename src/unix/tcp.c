@@ -181,14 +181,21 @@ int uv__tcp_connect(uv_connect_t* req,
     req->aio_connect.aio_msgev_addr = &req->aio_connect_msg;
     req->aio_connect.aio_msgev_size = sizeof(req->aio_connect_msg.mm_ptr);
     req->aio_connect.aio_sockaddrlen = addrlen;
-    req->aio_connect.aio_sockaddrptr = (struct sockaddr_in*)addr;
-    BPX1AIO(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
-    //printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
-    r = rv;
-    if(rv != 0)
-      errno = rc;
-    else
-      ++handle->aio_pending;
+    req->aio_connect.aio_sockaddrptr = (struct sockaddr_in*)malloc(addrlen);
+    if (req->aio_connect.aio_sockaddrptr != NULL) {
+      memcpy(req->aio_connect.aio_sockaddrptr, addr, addrlen);
+      BPX1AIO(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
+      //printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
+      r = rv;
+      if(rv != 0) {
+        errno = rc;
+      }
+      else {
+        r = -1;
+        errno = EINPROGRESS;
+        ++handle->aio_pending;
+      }
+    }
 #else
     r = connect(uv__stream_fd(handle), addr, addrlen);
 #endif
@@ -196,23 +203,18 @@ int uv__tcp_connect(uv_connect_t* req,
   while (r == -1 && errno == EINTR);
 
   if (r == -1) {
-#if defined(__MVS__)
-    if (errno == EADDRINUSE)
-      ; /* not an error */
-    else if (errno == EINPROGRESS)
-      return -errno;
-#else
     if (errno == EINPROGRESS)
       ; /* not an error */
-#endif
-    else if (errno == ECONNREFUSED)
+    else if (errno == ECONNREFUSED){
     /* If we get a ECONNREFUSED wait until the next tick to report the
      * error. Solaris wants to report immediately--other unixes want to
      * wait.
      */
       handle->delayed_error = -errno;
-    else
+}
+    else{
       return -errno;
+}
   }
 
   uv__req_init(handle->loop, req, UV_CONNECT);

@@ -152,7 +152,7 @@ int uv__tcp_connect(uv_connect_t* req,
                     unsigned int addrlen,
                     uv_connect_cb cb) {
   int err;
-  int r;
+  int r = -1;
 
   assert(handle->type == UV_TCP);
 
@@ -175,6 +175,7 @@ int uv__tcp_connect(uv_connect_t* req,
     req->aio_connect.aio_fildes = uv__stream_fd(handle);
     req->aio_connect.aio_notifytype = AIO_MSGQ;
     req->aio_connect.aio_cmd = AIO_CONNECT;
+    req->aio_connect.aio_cflags |= AIO_OK2COMPIMD;
     req->aio_connect.aio_msgev_qid = handle->loop->msgqid;
     req->aio_connect_msg.mm_type = AIO_MSG_READ;
     req->aio_connect_msg.mm_ptr = &handle->io_watcher;
@@ -186,14 +187,20 @@ int uv__tcp_connect(uv_connect_t* req,
       memcpy(req->aio_connect.aio_sockaddrptr, addr, addrlen);
       BPX1AIO(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
       //printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
-      r = rv;
-      if(rv != 0) {
+      if(rv < 0) {
+        r = rv;
         errno = rc;
       }
-      else {
+      else if(rv == 0){
+	/* connect has not happened immediately 
+	   wait for notification */
         r = -1;
         errno = EINPROGRESS;
         ++handle->aio_pending;
+      }
+      else if(rv == 1) {
+	/* do nothing. Just as if connect() succeeded */
+        r = 1;
       }
     }
 #else
@@ -205,16 +212,14 @@ int uv__tcp_connect(uv_connect_t* req,
   if (r == -1) {
     if (errno == EINPROGRESS)
       ; /* not an error */
-    else if (errno == ECONNREFUSED){
+    else if (errno == ECONNREFUSED)
     /* If we get a ECONNREFUSED wait until the next tick to report the
      * error. Solaris wants to report immediately--other unixes want to
      * wait.
      */
       handle->delayed_error = -errno;
-}
-    else{
+    else
       return -errno;
-}
   }
 
   uv__req_init(handle->loop, req, UV_CONNECT);
@@ -223,7 +228,11 @@ int uv__tcp_connect(uv_connect_t* req,
   QUEUE_INIT(&req->queue);
   handle->connect_req = req;
 
-#if !defined(__MVS__)
+#if defined(__MVS__)
+  if (r == 1)
+    /* the aio connect succeeded immediately. Ready for io */
+    uv__io_feed(handle->loop, &handle->io_watcher);
+#else
   uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);
 #endif
 

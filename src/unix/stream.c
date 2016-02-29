@@ -564,8 +564,13 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 
 #if defined(__MVS__)
   if(stream->type == UV_TCP) {
-    if((stream->flags & UV_STREAM_READING) && !(stream->flags & UV_CLOSING)) {
+    if(!(stream->flags & UV_CLOSING)) {
       /* start polling for next connection */
+      memset(&stream->aio_read, 0, sizeof(struct aiocb));
+      stream->aio_read.aio_fildes = stream->io_watcher.fd;
+      stream->aio_read.aio_notifytype = AIO_MSGQ;
+      stream->aio_read.aio_cmd = AIO_ACCEPT;
+      stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
       stream->aio_read_msg.mm_type = AIO_MSG_READ;
       stream->aio_read_msg.mm_ptr = &stream->io_watcher;
       stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
@@ -726,23 +731,7 @@ done:
     if (err == 0) {
 
 #if defined(__MVS__)
-      if(server->type == UV_TCP && !(server->flags & UV_CLOSING)) {
-        memset(&server->aio_read, 0, sizeof(struct aiocb));
-        server->aio_read.aio_fildes = server->io_watcher.fd;
-        server->aio_read.aio_notifytype = AIO_MSGQ;
-        server->aio_read.aio_cmd = AIO_ACCEPT;
-        server->aio_read.aio_msgev_qid = server->loop->msgqid;
-        server->aio_read_msg.mm_type = AIO_MSG_READ;
-        server->aio_read_msg.mm_ptr = &server->io_watcher;
-        server->aio_read.aio_msgev_addr = &server->aio_read_msg;
-        server->aio_read.aio_msgev_size = sizeof(server->aio_read_msg.mm_ptr);
-        int rv, rc, rsn;
-        BPX1AIO(sizeof(server->aio_read), &server->aio_read, &rv, &rc, &rsn);
-        //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", server->aio_read.aio_fildes, rv, rc, rsn);
-        assert(rv==0);
-        ++server->aio_pending;
-      }
-      else
+      if(server->type != UV_TCP) 
         uv__io_start(server->loop, &server->io_watcher, POLLIN);
 #else
       uv__io_start(server->loop, &server->io_watcher, POLLIN);

@@ -1810,6 +1810,7 @@ int uv_write2(uv_write_t* req,
       req->aio_write.aio_fildes = uv__stream_fd(stream);
       req->aio_write.aio_notifytype = AIO_MSGQ;
       req->aio_write.aio_cmd = AIO_WRITE;
+      req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
       req->aio_write.aio_msgev_qid = req->handle->loop->msgqid;
       req->aio_write.aio_buf = (void *)req->bufs[0].base;
       req->aio_write.aio_offset = 0;
@@ -1838,10 +1839,18 @@ int uv_write2(uv_write_t* req,
     req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
     int rv, rc, rsn;
     BPX1AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-    //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write, rv, rc, rsn);
-    assert(rv==0);
-    ++stream->aio_pending;
-    return 0;
+    //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);
+    if (rv == 1) {
+      uv__write(stream);
+      uv__write_callbacks(stream);
+    }
+    else if(rv == 0) {
+      // do nothing
+      ++stream->aio_pending;
+      return 0;
+    }
+    else if (rv < 0)
+      return -rc;
   }
 #endif
   else if (empty_queue) {
@@ -2009,20 +2018,15 @@ int uv_read_stop(uv_stream_t* stream) {
 
 #if defined(__MVS__)
   if (stream->type == UV_TCP && !(stream->flags & UV_CLOSING)) {
-    if (stream->aio_pending > 0) {
       memset(&stream->aio_cancel, 0, sizeof(struct aiocb));
       stream->aio_cancel.aio_fildes = uv__stream_fd(stream);
-      stream->aio_cancel.aio_notifytype = AIO_MSGQ;
       stream->aio_cancel.aio_cmd = AIO_CANCEL;
-      stream->aio_cancel.aio_msgev_qid = stream->loop->msgqid;
-      stream->aio_cancel_msg.mm_type = AIO_MSG_READ;
-      stream->aio_cancel_msg.mm_ptr = &stream->io_watcher;
-      stream->aio_cancel.aio_msgev_addr = &stream->aio_cancel_msg;
-      stream->aio_cancel.aio_msgev_size = sizeof(stream->aio_cancel_msg.mm_ptr);
+      stream->aio_cancel.aio_buf = &stream->aio_read;
+      stream->aio_cancel.aio_offset = 0;
+      stream->aio_cancel.aio_nbytes = sizeof(struct aiocb);
       int rv, rc, rsn;
       BPX1AIO(sizeof(stream->aio_cancel), &stream->aio_cancel, &rv, &rc, &rsn);
       //printf("JBAR:%d issued aio_cancel (read) for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_cancel.aio_fildes, rv, rc, rsn);
-    }
   }
   else
     uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);

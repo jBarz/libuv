@@ -6,8 +6,8 @@ struct _epoll_list* _global_epoll_list[MAX_EPOLL_INSTANCES];
 
 static int _removefd(struct _epoll_list *lst, int fd)
 {
-        int deletion_point = lst->size;                         
-        for (int i = 0; i < lst->size; ++i)                     
+        int deletion_point = lst->size + 1;                         
+        for (int i = 0; i < lst->size + 1; ++i)                     
         {                                                                  
             if(lst->items[i].fd == fd)                                            
             {                                                              
@@ -16,7 +16,7 @@ static int _removefd(struct _epoll_list *lst, int fd)
             }                                                              
         }                                                                  
 
-        if (deletion_point < lst->size)                         
+        if (deletion_point < lst->size + 1)                         
         {                                                                  
             for (int i = deletion_point; i < lst->size + 1; ++i)    
             {                                                              
@@ -24,7 +24,7 @@ static int _removefd(struct _epoll_list *lst, int fd)
             }                                                              
             --(lst->size);                                        
             return 1;
-        }                                                                  
+        }
         else
             return 0;
 }

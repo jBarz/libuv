@@ -1450,16 +1450,7 @@ static void uv__read(uv_stream_t* stream) {
       /* Continue to read */
       if(stream->type == UV_TCP && !(stream->flags & UV_CLOSING) && (stream->flags & UV_STREAM_READING))
       {
-        memset(&stream->aio_read, 0, sizeof(struct aiocb));
-        stream->aio_read.aio_fildes = uv__stream_fd(stream);
-        stream->aio_read.aio_notifytype = AIO_MSGQ;
-        stream->aio_read.aio_cmd = AIO_READ;
         stream->aio_read.aio_cflags |= AIO_OK2COMPIMD;
-        stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
-        stream->aio_read_msg.mm_type = AIO_MSG_READ;
-        stream->aio_read_msg.mm_ptr = &stream->io_watcher;
-        stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
-        stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
         stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
         stream->aio_read.aio_buf = buf.base;
         stream->aio_read.aio_offset = 0;

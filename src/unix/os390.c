@@ -775,12 +775,7 @@ int async_message(uv_loop_t* loop) {
 		else
 			assert(0 && "unexpected message\n");
 
-
-
 	}
-
-
-
 }
 
 void uv__io_poll(uv_loop_t* loop, int timeout) {
@@ -875,6 +870,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				events,
 				ARRAY_SIZE(events),
 				timeout);
+		//printf("JBAR epoll wait for timeout=%d nfds=%d\n", timeout, nfds); 
 
 		/* Update loop->time unconditionally. It's tempting to skip the update when
 		 * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the

@@ -584,16 +584,7 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     /* we know that a connection is availble for accept. 
        start polling for the next connection */
     if((stream->type == UV_TCP) && !(stream->flags & UV_CLOSING)) {
-      memset(&stream->aio_read, 0, sizeof(struct aiocb));
-      stream->aio_read.aio_fildes = stream->io_watcher.fd;
-      stream->aio_read.aio_notifytype = AIO_MSGQ;
-      stream->aio_read.aio_cmd = AIO_ACCEPT;
       stream->aio_read.aio_cflags |= AIO_OK2COMPIMD;
-      stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
-      stream->aio_read_msg.mm_type = AIO_MSG_READ;
-      stream->aio_read_msg.mm_ptr = &stream->io_watcher;
-      stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
-      stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
       int rv, rc, rsn;
       BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
       //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);

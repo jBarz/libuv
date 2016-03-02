@@ -395,7 +395,9 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
 #if defined(__MVS__)
   if (loop->msgqid > 0) {
     msgctl(loop->msgqid, IPC_RMID, NULL);
+    uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, loop->msgqid, NULL);
     loop->msgqid = -1;
+    //printf("JBAR msgqid is removed\n");
   }
 #endif
 

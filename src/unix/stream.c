@@ -574,32 +574,32 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     int aio_accept_err=-1;
     if(stream->type == UV_TCP) {
     /* capture error state of the prior aio accept */
-      aio_accept_err = aio_error(&stream->aio_read);
+      uv_tcp_t *tcp = (uv_tcp_t*)stream;
+      aio_accept_err = aio_error(&tcp->aio_accept_active->aioCb);
       if(aio_accept_err ==  0)
-        aio_accept_err = aio_return(&stream->aio_read);
+        aio_accept_err = aio_return(&tcp->aio_accept_active->aioCb);
       else
         aio_accept_err = -aio_accept_err;
-    }
  
-    /* we know that a connection is availble for accept. 
+      /* we know that a connection is availble for accept. 
        start polling for the next connection */
-    if((stream->type == UV_TCP) && !(stream->flags & UV_CLOSING)) {
-      stream->aio_read.aio_cflags |= AIO_OK2COMPIMD;
-      int rv, rc, rsn;
-      BPX1AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-      //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", stream->aio_read.aio_fildes, rv, rc, rsn);
-      assert(rv >= 0);
-      if(rv == 0) {
-	/* next connection is not immediately available */
-	/* so after processing the current connection, it will break out of the loop */
-	/* We will get a message notification for anything new */
-        is_next_connection_available = 0;
-        ++stream->aio_pending;
+      if(!(tcp->flags & UV_CLOSING)) {
+        tcp->aio_accept_active->aioCb.aio_cflags |= AIO_OK2COMPIMD;
+        int rv, rc, rsn;
+        BPX1AIO(sizeof(tcp->aio_accept_active->aioCb), &tcp->aio_accept_active->aioCb, &rv, &rc, &rsn);
+        //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_accept_active->aioCb.aio_fildes, rv, rc, rsn);
+        assert(rv >= 0);
+        if(rv == 0) {
+	  /* next connection is not immediately available */
+	  /* so after processing the current connection, it will break out of the loop */
+	  /* We will get a message notification for anything new */
+          is_next_connection_available = 0;
+          ++tcp->aio_pending;
+        }
       }
-    }
 
-    if(stream->type == UV_TCP)
       err = aio_accept_err;
+    }
     else
       err = uv__accept(uv__stream_fd(stream));
 #else
@@ -1769,7 +1769,9 @@ int uv_write2(uv_write_t* req,
   req->handle = stream;
   req->error = 0;
   req->send_handle = send_handle;
+#if defined(__MVS__)
   req->aio_write.aio_fildes = -1;
+#endif
   QUEUE_INIT(&req->queue);
 
   req->bufs = req->bufsml;

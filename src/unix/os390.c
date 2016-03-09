@@ -707,20 +707,30 @@ int async_message(uv_loop_t* loop) {
 	        struct AioMsg msgin;
 	        int msglen;
 
-		memset(&msgin, 0, sizeof(struct AioMsg));
 		msglen = msgrcv(loop->msgqid, &msgin, sizeof(msgin.mm_ptr), 0, IPC_NOWAIT );
-		//printf("JBAR msgrcv returned %d type = %d\n", msglen, msgin.mm_type);
+		//printf("JBAR msgrcv returned %d , errno=%d, type = %d\n", msglen, errno, msgin.mm_type);
 		if (msglen == -1)
 		  return nevents;
 
-		assert(msgin.mm_type == AIO_MSG_READ || msgin.mm_type == AIO_MSG_WRITE);		
+		assert(msgin.mm_type == AIO_MSG_READ || msgin.mm_type == AIO_MSG_WRITE || msgin.mm_type == AIO_MSG_ACCEPT);
 		++nevents;
 
-		if(msgin.mm_type == AIO_MSG_READ)
+		if(msgin.mm_type == AIO_MSG_READ || msgin.mm_type == AIO_MSG_ACCEPT)
 		{
 			int flags=0;
-			uv__io_t *watcher = (uv__io_t*)msgin.mm_ptr;
-			uv_stream_t* stream = container_of(watcher, uv_stream_t, io_watcher);
+			uv__io_t *watcher;
+			uv_stream_t* stream;
+
+			if (msgin.mm_type == AIO_MSG_ACCEPT) {
+			  struct AioAcceptCb *aioAcceptCb = (struct AioAcceptCb*)msgin.mm_ptr;
+			  stream = (uv_tcp_t*)aioAcceptCb->stream;
+			  watcher = &stream->io_watcher;
+			  ((uv_tcp_t*)stream)->aio_accept_active = aioAcceptCb;
+			}
+			else {
+			  watcher = (uv__io_t*)msgin.mm_ptr;
+			  stream = container_of(watcher, uv_stream_t, io_watcher);
+			}
 			//printf("JBAR got AIO_MSG_READ\n");
 
 			assert(stream->aio_pending > 0);

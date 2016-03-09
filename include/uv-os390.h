@@ -28,12 +28,18 @@
 
 #define AIO_MSG_READ 1
 #define AIO_MSG_WRITE 2
+#define AIO_MSG_ACCEPT 3
 
 struct AioMsg{         /* The I/O Complete Message                */
         long int mm_type;   /* Msg type: used for type of I/O    */
         void *mm_ptr; /* Msg text: identifies the client   */
 };
 
+struct AioAcceptCb{
+  struct aiocb aioCb;
+  struct AioMsg aioMsg;
+  void *stream;
+};
 
 #define UV_PLATFORM_FS_EVENT_FIELDS                                           \
   void* watchers[2];                                                          \
@@ -44,6 +50,8 @@ struct AioMsg{         /* The I/O Complete Message                */
 
 #define UV_TCP_PRIVATE_PLATFORM_FIELDS                                        \
     int is_bound;							      \
+    struct AioAcceptCb *aio_accepts;                                          \
+    struct AioAcceptCb *aio_accept_active;                                                    \
 
 #define UV_PLATFORM_WRITE_FIELDS                                              \
     struct aiocb aio_write;                                                   \

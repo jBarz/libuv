@@ -212,7 +212,11 @@ static int tcp4_echo_start(int port) {
   struct sockaddr_in addr;
   int r;
 
-//freopen("/home/barboza/libuv.latest/log", "w", stdout);
+#if defined(__MVS__)
+ //freopen("/home/barboza/libuv.latest/log", "w", stdout); 
+#else
+ //freopen("/gsa/tlbgsa/home/j/b/jbarboza/libuv/tmp/log", "w", stdout); 
+#endif
   ASSERT(0 == uv_ip4_addr("0.0.0.0", port, &addr));
 
   server = (uv_handle_t*)&tcpServer;

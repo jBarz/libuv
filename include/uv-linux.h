@@ -31,4 +31,8 @@
   void* watchers[2];                                                          \
   int wd;                                                                     \
 
+#define UV_PLATFORM_CONNECT_FIELDS
+#define UV_PLATFORM_WRITE_FIELDS
+#define UV_STREAM_PRIVATE_PLATFORM_FIELDS
+
 #endif /* UV_LINUX_H */

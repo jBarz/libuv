@@ -70,7 +70,9 @@ UV_UNUSED(static long cmpxchgl(long* ptr, long oldval, long newval)) {
 #elif defined __MVS__
   long out = (*(volatile int*) ptr);
 # ifdef _LP64
-  cds(&oldval, ptr, newval);
+  cds_t newvald;
+  newvald.alignment_dummy = (double)newval;
+  cds(&oldval, ptr, newvald);
 # else
   cs(&oldval, ptr, newval);
 # endif

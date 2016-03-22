@@ -20,7 +20,7 @@
 
 #include "uv.h"
 #include "internal.h"
-#include "CSRSIC.H"
+#include "csrsic.h"
 #include "os390-syscalls.h"
 
 #include <stdio.h>
@@ -284,6 +284,7 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 		if (fd != -1)
 			uv__cloexec(fd, 1);
 	}
+	//printf("JBAR fd=%d\n", fd);
 
 	loop->backend_fd = fd;
 

@@ -39,6 +39,7 @@
 #include <sys/socket.h>
 #if defined (__MVS__)
 #define _OPEN_SYS_FILE_EXT 1
+#include <stdlib.h>
 #endif
 #include <sys/stat.h>
 #include <sys/time.h>

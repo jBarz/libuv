@@ -1,4 +1,5 @@
 #include "os390-syscalls.h"
+#include <stdlib.h>
 #include <errno.h>
 
 int	_number_of_epolls;
@@ -75,19 +76,22 @@ static int _append(struct _epoll_list *lst, int fd, struct epoll_event events)
 
 int epoll_create1(int flags)
 {
-    struct _epoll_list* p = (void*)calloc(1, sizeof(struct _epoll_list));
-    _global_epoll_list[_number_of_epolls++] = p;
-    if (pthread_mutex_init(&p->lock, NULL) != 0) {
+    struct _epoll_list* p = (struct _epoll_list*)malloc(sizeof(struct _epoll_list));
+    memset(p, 0, sizeof(struct _epoll_list));
+    int index = _number_of_epolls++;
+    _global_epoll_list[index] = p;
+
+    if(pthread_mutex_init(&p->lock, NULL)) {
         errno = ENOLCK;
         return -1;
     }
     p->size = 0;
-    return (unsigned)p; 
+    return index; 
 }
 
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 {
-    struct _epoll_list *lst = (struct _epoll_list*)epfd;
+    struct _epoll_list *lst = _global_epoll_list[epfd];
 
     if(op == EPOLL_CTL_DEL){
         if(!_removefd(lst, fd))
@@ -143,7 +147,7 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 
 int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 {
-    struct _epoll_list *lst = (struct _epoll_list*)epfd;
+    struct _epoll_list *lst = _global_epoll_list[epfd];
 
     unsigned int size;
     _SET_FDS_MSGS(size, 1, lst->size);
@@ -152,6 +156,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
     struct pollfd *pfds = lst->items;
     //for (int i = 0; i < lst->size + 1 && i < maxevents; ++i)
       //printf("log: fd=%d events=%d\n", pfds[i].fd, pfds[i].events);
+    //printf("log: about to poll args size %u, %d \n", size, timeout);
     int returnval = poll( pfds, size, timeout );
     //printf("log: poll args size %u, %d returns %d errno %d\n", size, timeout, returnval, errno);
     if(returnval == -1)

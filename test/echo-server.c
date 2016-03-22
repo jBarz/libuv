@@ -213,9 +213,9 @@ static int tcp4_echo_start(int port) {
   int r;
 
 #if defined(__MVS__)
- //freopen("/home/barboza/libuv.latest/log", "w", stdout); 
+ /* freopen("/home/barboza/libuv.latest/log", "w", stdout);  */
 #else
- //freopen("/gsa/tlbgsa/home/j/b/jbarboza/libuv/tmp/log", "w", stdout); 
+ /* freopen("/gsa/tlbgsa/home/j/b/jbarboza/libuv/tmp/log", "w", stdout); */ 
 #endif
   ASSERT(0 == uv_ip4_addr("0.0.0.0", port, &addr));
 

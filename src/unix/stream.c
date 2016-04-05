@@ -956,28 +956,30 @@ start:
   } else {
     do {
 	//printf("JBAR writing data to fd=%d\n", uv__stream_fd(stream));
-      if (iovcnt == 1) {
 #if defined (__MVS__)
-	if(req->handle->type == UV_TCP)
-	{
-	  errno = aio_error(&req->aio_write);
-	  if(errno == 0)
-	    n = aio_return(&req->aio_write);
-	  else
-	    n = -1;
-	  //printf("JBAR writing async fd=%d, n=%d, errno=%d\n", uv__stream_fd(stream), n, errno);
-	}
+      if(req->handle->type == UV_TCP) {
+        errno = aio_error(&req->aio_write);
+	if(errno == 0)
+	  n = aio_return(&req->aio_write);
 	else
-	{
-	  //printf("JBAR writing sync fd=%d\n", uv__stream_fd(stream));
+	  n = -1;
+	//printf("JBAR writing async fd=%d, n=%d, errno=%d\n", uv__stream_fd(stream), n, errno);
+      }
+      else
+      {
+        if (iovcnt == 1) {
           n = write(uv__stream_fd(stream), iov[0].iov_base, iov[0].iov_len);
-	}
+        } else {
+          n = writev(uv__stream_fd(stream), iov, iovcnt);
+        }
+      }
 #else
+      if (iovcnt == 1) {
         n = write(uv__stream_fd(stream), iov[0].iov_base, iov[0].iov_len);
-#endif
       } else {
         n = writev(uv__stream_fd(stream), iov, iovcnt);
       }
+#endif
     }
 #if defined(__APPLE__)
     /*
@@ -1021,8 +1023,6 @@ start:
         stream->write_queue_size -= n;
         n = 0;
 #if defined(__MVS__)
-        req->aio_write.aio_buf = buf->base;
-        req->aio_write.aio_nbytes = buf->len;
 #endif
 
         /* There is more to write. */
@@ -1034,13 +1034,37 @@ start:
 #if defined(__MVS__)
           if(stream->type == UV_TCP && stream->flags != UV_CLOSING)
 	  {
+            memset(&req->aio_write, 0, sizeof(struct aiocb));
+            req->aio_write.aio_fildes = uv__stream_fd(stream);
+            req->aio_write.aio_notifytype = AIO_MSGQ;
             req->aio_write_msg.mm_type = AIO_MSG_WRITE;
             req->aio_write_msg.mm_ptr = req;
             req->aio_write.aio_msgev_addr = &req->aio_write_msg;
             req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
+            if(req->nbufs > 1) {
+	      /* vector */
+              req->aio_write.aio_cmd = AIO_WRITEV;
+              req->aio_write.aio_buf = &(req->bufs[req->write_index]);
+              iovcnt = req->nbufs - req->write_index;
+              if (iovcnt > iovmax)
+                iovcnt = iovmax;
+              req->aio_write.aio_nbytes = iovcnt;
+            } else {
+              req->aio_write.aio_cmd = AIO_WRITE;
+              req->aio_write.aio_buf = buf->base;
+              req->aio_write.aio_nbytes = buf->len;
+            }
+            req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
+            req->aio_write.aio_msgev_qid = req->handle->loop->msgqid;
             int rv, rc, rsn;
             BPX4AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
             //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__, req->aio_write.aio_fildes, rv, rc, rsn);
+            if(rv == 1) {
+	      /* Write happened synchronously */
+	      goto start;
+            }
+
+	    /* Write will happen asynchronously */
             assert(rv==0);
             ++stream->aio_pending;
 	    break;
@@ -1789,16 +1813,31 @@ int uv_write2(uv_write_t* req,
 #if defined(__MVS__)
     if(stream->type == UV_TCP)
     {
+      assert(sizeof(uv_buf_t) == sizeof(struct iovec));
+      struct iovec *iov = (struct iovec*) &(req->bufs[req->write_index]);
+      int iovcnt = req->nbufs - req->write_index;
+
+      int iovmax = uv__getiovmax();
+
+      /* Limit iov count to avoid EINVALs from writev() */
+      if (iovcnt > iovmax)
+        iovcnt = iovmax;
+
       /* create aiocb here and point to the buffers above */
       memset(&req->aio_write, 0, sizeof(struct aiocb));
       req->aio_write.aio_fildes = uv__stream_fd(stream);
       req->aio_write.aio_notifytype = AIO_MSGQ;
-      req->aio_write.aio_cmd = AIO_WRITE;
+      if(iovcnt > 1) { 
+        req->aio_write.aio_cmd = AIO_WRITEV;
+        req->aio_write.aio_nbytes = iovcnt;
+        req->aio_write.aio_buf = (void *)iov;
+      } else {
+        req->aio_write.aio_cmd = AIO_WRITE;
+        req->aio_write.aio_nbytes = (int)req->bufs[0].len;
+        req->aio_write.aio_buf = (void *)req->bufs[0].base;
+      }
       req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
       req->aio_write.aio_msgev_qid = req->handle->loop->msgqid;
-      req->aio_write.aio_buf = (void *)req->bufs[0].base;
-      req->aio_write.aio_offset = 0;
-      req->aio_write.aio_nbytes = (int)req->bufs[0].len;
     }
 #endif
 

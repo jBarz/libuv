@@ -696,40 +696,36 @@ int async_message(uv_loop_t* loop) {
 
 	int 		nevents = 0;
 
-	//bSignal = sigtimedwait(&loop->aio_sigset, &info, &t);
-	//printf("JBAR returned from sigtimedwait\n");
+	/* first collect all messages */
+        struct AioMsg msgin[1024];
+	for(int i = 0; i < 1024; ++i) {
+printf("JBAR before msgrcv\n");
+	  int msglen =  msgrcv(loop->msgqid, &msgin[i], sizeof(msgin[i].mm_ptr), 0, IPC_NOWAIT );
+printf("JBAR after msgrcv\n");
+	  if (msglen == -1) {
+	    break;
+	  }
+          assert(msgin[i].mm_type == AIO_MSG_READ || msgin[i].mm_type == AIO_MSG_WRITE || msgin[i].mm_type == AIO_MSG_ACCEPT);
+	  ++nevents;
+        }
 
-//	if (bSignal == -1)
-//		return 0;
-
-
-	for(;;)
+	/* now process them */
+	for(int i = 0; i < nevents; ++i)
 	{
-	        struct AioMsg msgin;
-	        int msglen;
-
-		msglen = msgrcv(loop->msgqid, &msgin, sizeof(msgin.mm_ptr), 0, IPC_NOWAIT );
-		//printf("JBAR msgrcv returned %d , errno=%d, type = %d\n", msglen, errno, msgin.mm_type);
-		if (msglen == -1)
-		  return nevents;
-
-		assert(msgin.mm_type == AIO_MSG_READ || msgin.mm_type == AIO_MSG_WRITE || msgin.mm_type == AIO_MSG_ACCEPT);
-		++nevents;
-
-		if(msgin.mm_type == AIO_MSG_READ || msgin.mm_type == AIO_MSG_ACCEPT)
+		if(msgin[i].mm_type == AIO_MSG_READ || msgin[i].mm_type == AIO_MSG_ACCEPT)
 		{
 			int flags=0;
 			uv__io_t *watcher;
 			uv_stream_t* stream;
 
-			if (msgin.mm_type == AIO_MSG_ACCEPT) {
-			  struct AioAcceptCb *aioAcceptCb = (struct AioAcceptCb*)msgin.mm_ptr;
+			if (msgin[i].mm_type == AIO_MSG_ACCEPT) {
+			  struct AioAcceptCb *aioAcceptCb = (struct AioAcceptCb*)msgin[i].mm_ptr;
 			  stream = (uv_tcp_t*)aioAcceptCb->stream;
 			  watcher = &stream->io_watcher;
 			  ((uv_tcp_t*)stream)->aio_accept_active = aioAcceptCb;
 			}
 			else {
-			  watcher = (uv__io_t*)msgin.mm_ptr;
+			  watcher = (uv__io_t*)msgin[i].mm_ptr;
 			  stream = container_of(watcher, uv_stream_t, io_watcher);
 			}
 			//printf("JBAR got AIO_MSG_READ\n");
@@ -737,7 +733,7 @@ int async_message(uv_loop_t* loop) {
 			assert(stream->aio_pending > 0);
 			stream->aio_pending--;
 
-			if (stream->flags & UV_STREAM_READ_EOF)
+			if (stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
 				flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
 			else if ((stream->flags & UV_CLOSING) && stream->aio_pending == 0)
 				flags = UV__POLLHUP;
@@ -749,10 +745,10 @@ int async_message(uv_loop_t* loop) {
 			watcher->cb(loop, watcher, flags);
 			continue;
 		}
-		else if(msgin.mm_type == AIO_MSG_WRITE && ((uv_req_t*)msgin.mm_ptr)->type == UV_WRITE)
+		else if(msgin[i].mm_type == AIO_MSG_WRITE && ((uv_req_t*)msgin[i].mm_ptr)->type == UV_WRITE)
 		{
 			int flags=0;
-			uv_write_t *req = (uv_write_t*)msgin.mm_ptr;
+			uv_write_t *req = (uv_write_t*)msgin[i].mm_ptr;
 			uv__io_t *watcher = &req->handle->io_watcher;
 			/* Skip invalidated events, see uv__platform_invalidate_fd */
 			int fd = req->aio_write.aio_fildes;
@@ -787,6 +783,7 @@ int async_message(uv_loop_t* loop) {
 			assert(0 && "unexpected message\n");
 
 	}
+	return nevents;
 }
 
 void uv__io_poll(uv_loop_t* loop, int timeout) {

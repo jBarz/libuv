@@ -1022,58 +1022,18 @@ start:
         buf->len -= n;
         stream->write_queue_size -= n;
         n = 0;
-#if defined(__MVS__)
-#endif
 
         /* There is more to write. */
         if (stream->flags & UV_STREAM_BLOCKING) {
+#if defined(__MVS__)
+	  /* MVS socket is in blocking mode but actually asynchronously handled by OS*/
+          break;
+#endif
           /*
            * If we're blocking then we should not be enabling the write
            * watcher - instead we need to try again.
            */
-#if defined(__MVS__)
-          if(stream->type == UV_TCP && stream->flags != UV_CLOSING)
-	  {
-            memset(&req->aio_write, 0, sizeof(struct aiocb));
-            req->aio_write.aio_fildes = uv__stream_fd(stream);
-            req->aio_write.aio_notifytype = AIO_MSGQ;
-            req->aio_write_msg.mm_type = AIO_MSG_WRITE;
-            req->aio_write_msg.mm_ptr = req;
-            req->aio_write.aio_msgev_addr = &req->aio_write_msg;
-            req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
-            if(req->nbufs > 1) {
-	      /* vector */
-              req->aio_write.aio_cmd = AIO_WRITEV;
-              req->aio_write.aio_buf = &(req->bufs[req->write_index]);
-              iovcnt = req->nbufs - req->write_index;
-              if (iovcnt > iovmax)
-                iovcnt = iovmax;
-              req->aio_write.aio_nbytes = iovcnt;
-            } else {
-              req->aio_write.aio_cmd = AIO_WRITE;
-              req->aio_write.aio_buf = buf->base;
-              req->aio_write.aio_nbytes = buf->len;
-            }
-            req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
-            req->aio_write.aio_msgev_qid = req->handle->loop->msgqid;
-            int rv, rc, rsn;
-            BPX4AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-            //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__, req->aio_write.aio_fildes, rv, rc, rsn);
-            if(rv == 1) {
-	      /* Write happened synchronously */
-	      goto start;
-            }
-
-	    /* Write will happen asynchronously */
-            assert(rv==0);
-            ++stream->aio_pending;
-	    break;
-	  }
-	  else
-            goto start;
-#else
           goto start;
-#endif
         } else {
           /* Break loop and ensure the watcher is pending. */
           break;
@@ -1106,13 +1066,47 @@ start:
   assert(n == 0 || n == -1);
 
 #if defined(__MVS__)
-  if (stream->type != UV_TCP)
-  {
-    /* Only non-blocking streams should use the write_watcher. */
-    assert(!(stream->flags & UV_STREAM_BLOCKING));
+  if(stream->type == UV_TCP) {
+    if( stream->flags != UV_CLOSING ) {
+      uv_buf_t* buf = &(req->bufs[req->write_index]);
+      memset(&req->aio_write, 0, sizeof(struct aiocb));
+      req->aio_write.aio_fildes = uv__stream_fd(stream);
+      req->aio_write.aio_notifytype = AIO_MSGQ;
+      req->aio_write_msg.mm_type = AIO_MSG_WRITE;
+      req->aio_write_msg.mm_ptr = req;
+      req->aio_write.aio_msgev_addr = &req->aio_write_msg;
+      req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
+      if(req->nbufs > 1) {
+        /* vector */
+        req->aio_write.aio_cmd = AIO_WRITEV;
+        req->aio_write.aio_buf = &(req->bufs[req->write_index]);
+        iovcnt = req->nbufs - req->write_index;
+        if (iovcnt > iovmax)
+	  iovcnt = iovmax;
+        req->aio_write.aio_nbytes = iovcnt;
+      } else {
+        req->aio_write.aio_cmd = AIO_WRITE;
+        req->aio_write.aio_buf = buf->base;
+        req->aio_write.aio_nbytes = buf->len;
+      }
+      req->aio_write.aio_msgev_qid = req->handle->loop->msgqid;
+      int rv, rc, rsn;
+      //printf("JBAR writeindex=%d nbytes=%d\n", req->write_index, req->aio_write.aio_nbytes);
+      BPX4AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
+      //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__, req->aio_write.aio_fildes, rv, rc, rsn);
 
-    /* We're not done. */
-    uv__io_start(stream->loop, &stream->io_watcher, UV__POLLOUT);
+      /* Write will happen asynchronously */
+      assert(rv==0);
+      ++stream->aio_pending;
+    }
+    else
+    {
+      /* Only non-blocking streams should use the write_watcher. */
+      assert(!(stream->flags & UV_STREAM_BLOCKING));
+
+      /* We're not done. */
+      uv__io_start(stream->loop, &stream->io_watcher, UV__POLLOUT);
+    }
   }
 #else
   /* Only non-blocking streams should use the write_watcher. */
@@ -1382,7 +1376,7 @@ static void uv__read(uv_stream_t* stream) {
 	    nread = aio_return(&stream->aio_read);
 	  else
 	    nread = -1;
-	  //printf("JBAR reading async fd=%d, nread=%d\n", uv__stream_fd(stream), nread, errno);
+	  //printf("JBAR reading async fd=%d, nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
 	}
 	else
 	{
@@ -1465,7 +1459,11 @@ static void uv__read(uv_stream_t* stream) {
       /* Continue to read */
       if(stream->type == UV_TCP && !(stream->flags & UV_CLOSING) && (stream->flags & UV_STREAM_READING))
       {
-        stream->aio_read.aio_cflags |= AIO_OK2COMPIMD;
+	if (count == 0) 
+	  /* too much reading on this socket. Continue reading on next tick */
+          stream->aio_read.aio_cflags &= ~AIO_OK2COMPIMD;
+	else
+          stream->aio_read.aio_cflags |= AIO_OK2COMPIMD;
         stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
         stream->aio_read.aio_buf = buf.base;
         stream->aio_read.aio_offset = 0;
@@ -1483,12 +1481,13 @@ static void uv__read(uv_stream_t* stream) {
           stream->read_cb(stream, -rc, &buf);
           return;
         }
-
-        if(rv == 1)
+        else if(rv == 1)
           continue; /* continue to read because it returned immediately */
 
-        ++stream->aio_pending;
-	// wait for io notification
+        ++stream->aio_pending;  /* wait for io notification */
+        stream->flags |= UV_STREAM_READ_PARTIAL;
+        return;
+
       }
 #endif
 
@@ -1558,27 +1557,6 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(stream->type == UV_TCP ||
          stream->type == UV_NAMED_PIPE ||
          stream->type == UV_TTY);
-
-
-#if defined(__MVS__)
-
-  if (stream->type == UV_TCP)
-  {
-    /* This write event has returned after the user has called uv_close */
-    if ( (events & UV__POLLOUT | UV__POLLHUP) && (stream->flags & UV_CLOSING)) {
-      //printf("JBAR got signal aio_write and handle is set to close. stream->aio_pending=%d\n", stream->aio_pending);
-      uv__write(stream);
-      uv__write_callbacks(stream);
-      //printf("JBAR about to take handle out of loop pending=%d\n", stream->aio_pending);
-      if (stream->aio_pending == 0) {
-        //printf("JBAR taking handle out of loop\n");
-        uv__handle_stop((uv_handle_t*)stream);
-        uv__make_close_pending((uv_handle_t*)stream);
-      }
-      return;
-    }
-  }
-#endif
 
 #if defined(__MVS__)
   /* on zOS this could be a sniff read after eof */
@@ -1836,7 +1814,6 @@ int uv_write2(uv_write_t* req,
         req->aio_write.aio_nbytes = (int)req->bufs[0].len;
         req->aio_write.aio_buf = (void *)req->bufs[0].base;
       }
-      req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
       req->aio_write.aio_msgev_qid = req->handle->loop->msgqid;
     }
 #endif
@@ -1860,20 +1837,19 @@ int uv_write2(uv_write_t* req,
     req->aio_write_msg.mm_ptr = req;
     req->aio_write.aio_msgev_addr = &req->aio_write_msg;
     req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
+    req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
     int rv, rc, rsn;
     BPX4AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
     //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);
     if (rv == 1) {
+    /* Synchronous write */
       uv__write(stream);
-      uv__write_callbacks(stream);
-    }
-    else if(rv == 0) {
-      // do nothing
-      ++stream->aio_pending;
-      return 0;
     }
     else if (rv < 0)
       return -rc;
+    else
+      /* Asynchronous write */
+      ++stream->aio_pending;
   }
 #endif
   else if (empty_queue) {
@@ -1933,7 +1909,14 @@ int uv_try_write(uv_stream_t* stream,
   if (stream->connect_req != NULL || stream->write_queue_size != 0)
     return -EAGAIN;
 
+#if defined(__MVS__)
+  if(stream->type == UV_TCP)
+    has_pollout = stream->aio_pending > 1;
+  else
+    has_pollout = uv__io_active(&stream->io_watcher, POLLOUT);
+#else
   has_pollout = uv__io_active(&stream->io_watcher, POLLOUT);
+#endif
 
   r = uv_write(&req, stream, bufs, nbufs, uv_try_write_cb);
   if (r != 0)
@@ -2131,6 +2114,7 @@ void uv__stream_close(uv_stream_t* handle) {
       handle->aio_cancel.aio_fildes = uv__stream_fd(handle);
       handle->aio_cancel.aio_notifytype = AIO_MSGQ;
       handle->aio_cancel.aio_cmd = AIO_CANCEL;
+      handle->aio_cancel.aio_cflags |= AIO_CANCELNONOTIFY;
       handle->aio_cancel.aio_msgev_qid = handle->loop->msgqid;
       handle->aio_cancel_msg.mm_type = AIO_MSG_READ;
       handle->aio_cancel_msg.mm_ptr = &handle->io_watcher;
@@ -2139,6 +2123,7 @@ void uv__stream_close(uv_stream_t* handle) {
       int rv, rc, rsn;
       BPX4AIO(sizeof(handle->aio_cancel), &handle->aio_cancel, &rv, &rc, &rsn);
       //printf("JBAR:%d issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, handle->aio_cancel.aio_fildes, rv, rc, rsn);
+      handle->aio_pending = 0;
     }
   }
   else

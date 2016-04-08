@@ -1831,6 +1831,8 @@ int uv_write2(uv_write_t* req,
 #if defined(__MVS__)
   else if(empty_queue && stream->type == UV_TCP)
   {
+    if(req->aio_write.aio_nbytes == 0)
+      return 0;
     assert(stream->flags & UV_STREAM_BLOCKING);
     //assert(aio_write(&req->aio_write)==0);
     req->aio_write_msg.mm_type = AIO_MSG_WRITE;

@@ -692,6 +692,25 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
 	}
 }
 
+int uv__io_check_fd(uv_loop_t* loop, int fd) {
+  struct uv__epoll_event e;
+  int rc;
+
+  e.events = UV__EPOLLIN;
+  e.data = -1;
+
+  rc = 0;
+  if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_ADD, fd, &e))
+    if (errno != EEXIST)
+      rc = -errno;
+
+  if (rc == 0)
+    if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, &e))
+      abort();
+
+  return rc;
+}
+
 int async_message(uv_loop_t* loop) {
 
 	int 		nevents = 0;

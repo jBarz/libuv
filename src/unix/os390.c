@@ -699,9 +699,7 @@ int async_message(uv_loop_t* loop) {
 	/* first collect all messages */
         struct AioMsg msgin[1024];
 	for(int i = 0; i < 1024; ++i) {
-printf("JBAR before msgrcv\n");
 	  int msglen =  msgrcv(loop->msgqid, &msgin[i], sizeof(msgin[i].mm_ptr), 0, IPC_NOWAIT );
-printf("JBAR after msgrcv\n");
 	  if (msglen == -1) {
 	    break;
 	  }

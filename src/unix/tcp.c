@@ -189,7 +189,7 @@ int uv__tcp_connect(uv_connect_t* req,
     req->aio_connect.aio_sockaddrptr = (struct sockaddr_in*)uv__malloc(addrlen);
     if (req->aio_connect.aio_sockaddrptr != NULL) {
       memcpy(req->aio_connect.aio_sockaddrptr, addr, addrlen);
-      BPX4AIO(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
+      ZASYNC(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
       //printf("JBAR issued aio_connect for fd=%d , rv=%d, rc=%d, rsn=%d\n", req->aio_connect.aio_fildes, rv, rc, rsn);
       if(rv < 0) {
         r = rv;
@@ -377,7 +377,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
     tcp->aio_accepts[i].aioCb.aio_msgev_size = sizeof(tcp->aio_accepts[i].aioMsg.mm_ptr);
     tcp->aio_accepts[i].stream = tcp;
     int rv, rc, rsn;
-    BPX4AIO(sizeof(struct aiocb), &tcp->aio_accepts[i].aioCb, &rv, &rc, &rsn);
+    ZASYNC(sizeof(struct aiocb), &tcp->aio_accepts[i].aioCb, &rv, &rc, &rsn);
     //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_accepts[i].aioCb.aio_fildes, rv, rc, rsn);
     if (rv == -1)
       return -rc;

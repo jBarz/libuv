@@ -30,6 +30,12 @@
 #define AIO_MSG_WRITE 2
 #define AIO_MSG_ACCEPT 3
 
+#if defined(__64BIT__)
+#define ZASYNC BPX4AIO
+#else
+#define ZASYNC BPX1AIO
+#endif
+
 struct AioMsg{         /* The I/O Complete Message                */
         long int mm_type;   /* Msg type: used for type of I/O    */
         void *mm_ptr; /* Msg text: identifies the client   */

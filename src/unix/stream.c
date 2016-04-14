@@ -586,7 +586,7 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       if(!(tcp->flags & UV_CLOSING)) {
         tcp->aio_accept_active->aioCb.aio_cflags |= AIO_OK2COMPIMD;
         int rv, rc, rsn;
-        BPX4AIO(sizeof(tcp->aio_accept_active->aioCb), &tcp->aio_accept_active->aioCb, &rv, &rc, &rsn);
+        ZASYNC(sizeof(tcp->aio_accept_active->aioCb), &tcp->aio_accept_active->aioCb, &rv, &rc, &rsn);
         //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_accept_active->aioCb.aio_fildes, rv, rc, rsn);
         assert(rv >= 0);
         if(rv == 0) {
@@ -840,7 +840,7 @@ static void uv__write_req_finish(uv_write_t* req) {
       req_next->aio_write.aio_msgev_addr = &req_next->aio_write_msg;
       req_next->aio_write.aio_msgev_size = sizeof(req_next->aio_write_msg.mm_ptr);
       int rv, rc, rsn;
-      BPX4AIO(sizeof(req_next->aio_write), &req_next->aio_write, &rv, &rc, &rsn);
+      ZASYNC(sizeof(req_next->aio_write), &req_next->aio_write, &rv, &rc, &rsn);
       //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req_next->aio_write.aio_fildes, rv, rc, rsn);
       assert(rv==0);
       ++stream->aio_pending;
@@ -1092,7 +1092,7 @@ start:
       req->aio_write.aio_msgev_qid = req->handle->loop->msgqid;
       int rv, rc, rsn;
       //printf("JBAR writeindex=%d nbytes=%d\n", req->write_index, req->aio_write.aio_nbytes);
-      BPX4AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
+      ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
       //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__, req->aio_write.aio_fildes, rv, rc, rsn);
 
       /* Write will happen asynchronously */
@@ -1475,7 +1475,7 @@ static void uv__read(uv_stream_t* stream) {
         }
 
         int rv, rc, rsn;
-        BPX4AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+        ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
         //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);
         if(rv < 0) {
           stream->read_cb(stream, -rc, &buf);
@@ -1693,7 +1693,7 @@ static void uv__stream_connect(uv_stream_t* stream) {
       else
       {
         int rv, rc, rsn;
-        BPX4AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+        ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
         //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);
 	if(rv != 0)
           error = -rc;
@@ -1841,7 +1841,7 @@ int uv_write2(uv_write_t* req,
     req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
     req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
     int rv, rc, rsn;
-    BPX4AIO(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
+    ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
     //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);
     if (rv == 1) {
     /* Synchronous write */
@@ -1999,7 +1999,7 @@ int uv_read_start(uv_stream_t* stream,
     stream->aio_read.aio_offset = 0;
     stream->aio_read.aio_nbytes = buf.len;
     int rv, rc, rsn;
-    BPX4AIO(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+    ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
     //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);
     assert(rv==0);
     ++stream->aio_pending;
@@ -2033,7 +2033,7 @@ int uv_read_stop(uv_stream_t* stream) {
       stream->aio_cancel.aio_offset = 0;
       stream->aio_cancel.aio_nbytes = sizeof(struct aiocb);
       int rv, rc, rsn;
-      BPX4AIO(sizeof(stream->aio_cancel), &stream->aio_cancel, &rv, &rc, &rsn);
+      ZASYNC(sizeof(stream->aio_cancel), &stream->aio_cancel, &rv, &rc, &rsn);
       //printf("JBAR:%d issued aio_cancel (read) for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_cancel.aio_fildes, rv, rc, rsn);
   }
   else
@@ -2123,7 +2123,7 @@ void uv__stream_close(uv_stream_t* handle) {
       handle->aio_cancel.aio_msgev_addr = &handle->aio_cancel_msg;
       handle->aio_cancel.aio_msgev_size = sizeof(handle->aio_cancel_msg.mm_ptr);
       int rv, rc, rsn;
-      BPX4AIO(sizeof(handle->aio_cancel), &handle->aio_cancel, &rv, &rc, &rsn);
+      ZASYNC(sizeof(handle->aio_cancel), &handle->aio_cancel, &rv, &rc, &rsn);
       //printf("JBAR:%d issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, handle->aio_cancel.aio_fildes, rv, rc, rsn);
       handle->aio_pending = 0;
     }

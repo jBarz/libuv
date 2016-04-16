@@ -2116,7 +2116,6 @@ void uv__stream_close(uv_stream_t* handle) {
       handle->aio_cancel.aio_fildes = uv__stream_fd(handle);
       handle->aio_cancel.aio_notifytype = AIO_MSGQ;
       handle->aio_cancel.aio_cmd = AIO_CANCEL;
-      handle->aio_cancel.aio_cflags |= AIO_CANCELNONOTIFY;
       handle->aio_cancel.aio_msgev_qid = handle->loop->msgqid;
       handle->aio_cancel_msg.mm_type = AIO_MSG_READ;
       handle->aio_cancel_msg.mm_ptr = &handle->io_watcher;
@@ -2125,7 +2124,6 @@ void uv__stream_close(uv_stream_t* handle) {
       int rv, rc, rsn;
       ZASYNC(sizeof(handle->aio_cancel), &handle->aio_cancel, &rv, &rc, &rsn);
       //printf("JBAR:%d issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, handle->aio_cancel.aio_fildes, rv, rc, rsn);
-      handle->aio_pending = 0;
     }
   }
   else

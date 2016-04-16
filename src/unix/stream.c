@@ -1554,6 +1554,18 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 #if defined(__MVS__)
   /* on zOS this could be a sniff read after eof */
 //printf("JBAR stream flags=%d events = %d\n", stream->flags, events);
+  if (stream->type == UV_TCP)
+  {
+    /* This write event has returned after the user has called uv_close */
+    if ( (events & UV__POLLOUT | UV__POLLHUP) && (stream->flags & UV_CLOSING)) {
+      if (stream->aio_pending == 0) {
+        //printf("JBAR taking handle out of loop\n");
+        uv__handle_stop((uv_handle_t*)stream);
+        uv__make_close_pending((uv_handle_t*)stream);
+      }
+      return;
+    }
+  }
   if(stream->type == UV_TCP)
     assert(!(stream->flags & UV_CLOSING) || ((stream->flags & UV_CLOSING) && (events & UV__POLLHUP )));
   else
@@ -1929,6 +1941,7 @@ int uv_try_write(uv_stream_t* stream,
 
   /* Unqueue request, regardless of immediateness */
   QUEUE_REMOVE(&req.queue);
+  QUEUE_REMOVE(&stream->io_watcher.pending_queue);
   uv__req_unregister(stream->loop, &req);
   if (req.bufs != req.bufsml)
     uv__free(req.bufs);

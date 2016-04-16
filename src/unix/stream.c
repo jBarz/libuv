@@ -66,7 +66,6 @@ static void uv__read(uv_stream_t* stream);
 static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events);
 static void uv__write_callbacks(uv_stream_t* stream);
 static size_t uv__write_req_size(uv_write_t* req);
-static void uv__stream_cleanup(uv_stream_t* stream);
 
 
 void uv__stream_init(uv_loop_t* loop,
@@ -105,7 +104,6 @@ void uv__stream_init(uv_loop_t* loop,
   stream->aio_read.aio_fildes = -1;
   stream->aio_pending = 0;
 #endif /* defined(__APPLE_) */
-
 
   uv__io_init(&stream->io_watcher, uv__stream_io, -1);
 }
@@ -528,6 +526,7 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   int err;
 
   stream = container_of(w, uv_stream_t, io_watcher);
+
 #if defined(__MVS__)
 
   if (stream->type == UV_TCP)
@@ -571,9 +570,9 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     if((stream->type == UV_TCP) && !is_next_connection_available)
       break;
 
-    int aio_accept_err=-1;
     if(stream->type == UV_TCP) {
     /* capture error state of the prior aio accept */
+      int aio_accept_err=-1;
       uv_tcp_t *tcp = (uv_tcp_t*)stream;
       aio_accept_err = aio_error(&tcp->aio_accept_active->aioCb);
       if(aio_accept_err ==  0)
@@ -663,7 +662,7 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
     case UV_TCP:
       err = uv__stream_open(client,
                             server->accepted_fd,
-                            UV_STREAM_READABLE | UV_STREAM_WRITABLE );
+                            UV_STREAM_READABLE | UV_STREAM_WRITABLE);
       if (err) {
         /* TODO handle error */
         uv__close(server->accepted_fd);
@@ -711,16 +710,13 @@ done:
     }
   } else {
     server->accepted_fd = -1;
-
-    if (err == 0) {
-
+    if (err == 0)
 #if defined(__MVS__)
       if(server->type != UV_TCP) 
         uv__io_start(server->loop, &server->io_watcher, POLLIN);
 #else
       uv__io_start(server->loop, &server->io_watcher, POLLIN);
 #endif
-    }
 
   }
   return err;
@@ -819,7 +815,6 @@ static void uv__write_req_finish(uv_write_t* req) {
     if (req->bufs != req->bufsml)
       uv__free(req->bufs);
     req->bufs = NULL;
-
   }
 
   /* Add it to the write_completed_queue where it will have its
@@ -846,6 +841,8 @@ static void uv__write_req_finish(uv_write_t* req) {
       ++stream->aio_pending;
     }
   }
+  else
+    uv__io_feed(stream->loop, &stream->io_watcher);
 #else
   uv__io_feed(stream->loop, &stream->io_watcher);
 #endif
@@ -878,7 +875,7 @@ static void uv__write(uv_stream_t* stream) {
 start:
 
 #if defined(__MVS__)
-  if(!(stream->flags & UV_CLOSING))
+  if(!(stream->type == UV_TCP && stream->flags & UV_CLOSING))
     assert(uv__stream_fd(stream) >= 0);
 #else
   assert(uv__stream_fd(stream) >= 0);
@@ -1054,9 +1051,7 @@ start:
           assert(n == 0);
           uv__write_req_finish(req);
           /* TODO: start trying to write the next request. */
-
           return;
-
         }
       }
     }
@@ -1099,14 +1094,14 @@ start:
       assert(rv==0);
       ++stream->aio_pending;
     }
-    else
-    {
-      /* Only non-blocking streams should use the write_watcher. */
-      assert(!(stream->flags & UV_STREAM_BLOCKING));
+  }
+  else
+  {
+    /* Only non-blocking streams should use the write_watcher. */
+    assert(!(stream->flags & UV_STREAM_BLOCKING));
 
-      /* We're not done. */
-      uv__io_start(stream->loop, &stream->io_watcher, UV__POLLOUT);
-    }
+    /* We're not done. */
+    uv__io_start(stream->loop, &stream->io_watcher, UV__POLLOUT);
   }
 #else
   /* Only non-blocking streams should use the write_watcher. */
@@ -1340,7 +1335,6 @@ static void uv__read(uv_stream_t* stream) {
   while (stream->read_cb
       && (stream->flags & UV_STREAM_READING)
       && (count-- > 0)) {
-
     assert(stream->alloc_cb != NULL);
 
 #if defined (__MVS__)
@@ -1443,7 +1437,6 @@ static void uv__read(uv_stream_t* stream) {
       return;
     } else {
       /* Successful read */
-
       ssize_t buflen = buf.len;
 
       if (is_ipc) {
@@ -1561,7 +1554,10 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 #if defined(__MVS__)
   /* on zOS this could be a sniff read after eof */
 //printf("JBAR stream flags=%d events = %d\n", stream->flags, events);
-  assert(!(stream->flags & UV_CLOSING) || ((stream->flags & UV_CLOSING) && (events & UV__POLLHUP )));
+  if(stream->type == UV_TCP)
+    assert(!(stream->flags & UV_CLOSING) || ((stream->flags & UV_CLOSING) && (events & UV__POLLHUP )));
+  else
+    assert(!(stream->flags & UV_CLOSING));
 #else
   assert(!(stream->flags & UV_CLOSING));
 #endif
@@ -1601,7 +1597,6 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     uv__write(stream);
     uv__write_callbacks(stream);
 
-    
     /* Write queue drained. */
     if (QUEUE_EMPTY(&stream->write_queue))
       uv__drain(stream);
@@ -1620,7 +1615,6 @@ static void uv__stream_connect(uv_stream_t* stream) {
   socklen_t errorsize = sizeof(int);
 
 //printf("JBAR connected for fd=%d\n", uv__stream_fd(stream));
-
   assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE);
   assert(req);
 
@@ -1822,11 +1816,11 @@ int uv_write2(uv_write_t* req,
   QUEUE_INSERT_TAIL(&stream->write_queue, &req->queue);
 
   /* If the queue was empty when this function began, we should attempt to
-  * do the write immediately. Otherwise start the write_watcher and wait
-  * for the fd to become writable.
-  */
+   * do the write immediately. Otherwise start the write_watcher and wait
+   * for the fd to become writable.
+   */
   if (stream->connect_req) {
-  /* Still connecting, do nothing. */
+    /* Still connecting, do nothing. */
   }
 #if defined(__MVS__)
   else if(empty_queue && stream->type == UV_TCP)

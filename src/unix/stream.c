@@ -1777,9 +1777,6 @@ int uv_write2(uv_write_t* req,
   req->handle = stream;
   req->error = 0;
   req->send_handle = send_handle;
-#if defined(__MVS__)
-  req->aio_write.aio_fildes = -1;
-#endif
   QUEUE_INIT(&req->queue);
 
   req->bufs = req->bufsml;
@@ -1845,7 +1842,6 @@ int uv_write2(uv_write_t* req,
     req->aio_write_msg.mm_ptr = req;
     req->aio_write.aio_msgev_addr = &req->aio_write_msg;
     req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
-    req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
     int rv, rc, rsn;
     ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
     //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);

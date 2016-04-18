@@ -733,26 +733,30 @@ int async_message(uv_loop_t* loop) {
 		{
 			int flags=0;
 			uv__io_t *watcher;
-			uv_stream_t* stream;
+			uv_tcp_t* stream;
 
 			if (msgin[i].mm_type == AIO_MSG_ACCEPT) {
 			  struct AioAcceptCb *aioAcceptCb = (struct AioAcceptCb*)msgin[i].mm_ptr;
 			  stream = (uv_tcp_t*)aioAcceptCb->stream;
 			  watcher = &stream->io_watcher;
-			  ((uv_tcp_t*)stream)->aio_accept_active = aioAcceptCb;
+			  stream->aio_accept_active = aioAcceptCb;
+
+			  assert(stream->accept_count > 0);
+			  stream->accept_count--;
 			}
 			else {
 			  watcher = (uv__io_t*)msgin[i].mm_ptr;
 			  stream = container_of(watcher, uv_stream_t, io_watcher);
+
+			  assert(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
+			  stream->aio_status &= ~UV__ZAIO_READING;
+
 			}
 			//printf("JBAR got AIO_MSG_READ\n");
 
-			assert(stream->aio_pending > 0);
-			stream->aio_pending--;
-
 			if (stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
 				flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
-			else if ((stream->flags & UV_CLOSING) && stream->aio_pending == 0)
+			else if ((stream->flags & UV_CLOSING) && !(stream->aio_status & (UV__ZAIO_WRITING | UV__ZAIO_READING)))
 				flags = UV__POLLHUP;
 			else
 				flags = UV__POLLIN;
@@ -777,22 +781,25 @@ int async_message(uv_loop_t* loop) {
 				//printf("JBAR stale event\n");
 				//return 0;  /* closed stream could have aio_read events that slip through */
 
-			assert(req->handle->aio_pending > 0);
-			req->handle->aio_pending--;
+			assert(req->handle->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
+			req->handle->aio_status &= ~UV__ZAIO_WRITING;
 
-			if ((req->handle->flags & UV_CLOSING) && req->handle->aio_pending == 0)
+			if ((req->handle->flags & UV_CLOSING) && !(req->handle->aio_status & UV__ZAIO_READING))
 				flags = UV__POLLHUP;
 			else
 				flags = UV__POLLOUT;
 
 			/* move this at the head of the write queue because the callback assumes that 
 			   this event belongs to the head of the write queue */ 
-			//printf("JBAR callback called for write request fd=%d pending=%d\n", fd, req->handle->aio_pending);
-			if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
-			{
-				QUEUE_REMOVE(&req->queue);
-				QUEUE_INSERT_HEAD(&req->handle->write_queue, &req->queue);	
-			}
+			//printf("JBAR callback called for write request fd=%d req=%p aio_status=%d\n", fd, req, req->handle->aio_status);
+/*
+                       if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
+                       {
+                               QUEUE_REMOVE(&req->queue);
+                               QUEUE_INSERT_HEAD(&req->handle->write_queue, &req->queue);
+                       }
+*/
+
 			watcher->cb(loop, watcher, flags);
 			continue;
 		}

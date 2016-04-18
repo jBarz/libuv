@@ -30,6 +30,9 @@
 #define AIO_MSG_WRITE 2
 #define AIO_MSG_ACCEPT 3
 
+#define UV__ZAIO_READING 1
+#define UV__ZAIO_WRITING 2
+
 #if defined(__64BIT__)
 #define ZASYNC BPX4AIO
 #else
@@ -56,6 +59,7 @@ struct AioAcceptCb{
 
 #define UV_TCP_PRIVATE_PLATFORM_FIELDS                                        \
     int is_bound;							      \
+    int accept_count;							      \
     struct AioAcceptCb *aio_accepts;                                          \
     struct AioAcceptCb *aio_accept_active;                                                    \
 
@@ -68,7 +72,7 @@ struct AioAcceptCb{
     struct aiocb aio_cancel;                                                    \
     struct AioMsg aio_read_msg;                                               \
     struct AioMsg aio_cancel_msg;                                            \
-    int aio_pending;                                                          \
+    int aio_status;                                                          \
 
 #define UV_PLATFORM_CONNECT_FIELDS				              \
     struct aiocb aio_connect;                                                 \

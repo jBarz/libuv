@@ -200,7 +200,7 @@ int uv__tcp_connect(uv_connect_t* req,
 	   wait for notification */
         r = -1;
         errno = EINPROGRESS;
-        ++handle->aio_pending;
+        handle->aio_status |= UV__ZAIO_WRITING;
       }
       else if(rv == 1) {
 	/* do nothing. Just as if connect() succeeded */
@@ -382,7 +382,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
     if (rv == -1)
       return -rc;
     else
-      ++tcp->aio_pending;
+      tcp->accept_count++;
   }
 #else
   uv__io_start(tcp->loop, &tcp->io_watcher, POLLIN);

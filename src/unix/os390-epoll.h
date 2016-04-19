@@ -55,7 +55,7 @@ struct epoll_event {
 
 struct _epoll_list{
    struct pollfd items[MAX_ITEMS_PER_EPOLL];
-   struct pollmsg aio;
+   struct pollfd *aio;
    int size;
    pthread_mutex_t lock;
 };

@@ -7,8 +7,9 @@ struct _epoll_list* _global_epoll_list[MAX_EPOLL_INSTANCES];
 
 static int _removefd(struct _epoll_list *lst, int fd)
 {
-        int deletion_point = lst->size + 1;                         
-        for (int i = 0; i < lst->size + 1; ++i)                     
+	int realsize = lst->aio == NULL ? lst->size : lst->size + 1;
+        int deletion_point = realsize;                         
+        for (int i = 0; i < realsize; ++i)                     
         {                                                                  
             if(lst->items[i].fd == fd)                                            
             {                                                              
@@ -17,15 +18,21 @@ static int _removefd(struct _epoll_list *lst, int fd)
             }                                                              
         }                                                                  
 
-        if (deletion_point < lst->size + 1)                         
+        if (deletion_point < realsize - 2)                         
         {                                                                  
-            for (int i = deletion_point; i < lst->size + 1; ++i)    
+	    /* deleting a file descriptor */
+            for (int i = deletion_point; i < realsize; ++i)    
             {                                                              
                 lst->items[i] = lst->items[i+1];
             }                                                              
-            --(lst->size);                                        
+            --(lst->size);
             return 1;
         }
+	else if(deletion_point == realsize - 1) {
+	    /* deleting the message queue */
+	    lst->aio = NULL;
+	    return 1;
+	}
         else
             return 0;
 }
@@ -64,8 +71,10 @@ static int _append(struct _epoll_list *lst, int fd, struct epoll_event events)
 		return ENOMEM;
 
 	// remember, lst->size contains the msgq
-	lst->items[lst->size+1].fd = lst->items[lst->size].fd;
-	lst->items[lst->size+1].events = lst->items[lst->size].events; 
+	if(lst->aio != NULL) {
+	  lst->items[lst->size+1].fd = lst->items[lst->size].fd;
+	  lst->items[lst->size+1].events = lst->items[lst->size].events; 
+	}
 
 	lst->items[lst->size].fd = fd;
 	_modify(lst, lst->size, events); 
@@ -86,6 +95,7 @@ int epoll_create1(int flags)
         return -1;
     }
     p->size = 0;
+    p->aio = NULL;
     return index; 
 }
 
@@ -103,6 +113,7 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event)
 	pthread_mutex_lock(&lst->lock);
 	lst->items[lst->size].fd = fd;
 	lst->items[lst->size].events = POLLIN ;
+	lst->aio = &lst->items[lst->size];
 	pthread_mutex_unlock(&lst->lock);
 	return 0;
     }
@@ -150,7 +161,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
     struct _epoll_list *lst = _global_epoll_list[epfd];
 
     unsigned int size;
-    _SET_FDS_MSGS(size, 1, lst->size);
+    _SET_FDS_MSGS(size, lst->aio == NULL ? 0 : 1, lst->size);
     //printf("log: poll args size=%u, timeout=%d \n", size, timeout);
 
     struct pollfd *pfds = lst->items;
@@ -166,7 +177,8 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 
     int reventcount=0;
     // size + 1 will include the msgq
-    for (int i = 0; i < lst->size + 1 && i < maxevents; ++i)                     
+    int realsize = lst->aio == NULL ? lst->size : lst->size + 1;
+    for (int i = 0; i < realsize && i < maxevents; ++i)                     
     {
         struct epoll_event ev = { 0, 0 };
         //printf("log: fd=%d revents=%d\n", pfds[i].fd, pfds[i].revents);

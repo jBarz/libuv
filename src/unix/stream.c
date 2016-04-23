@@ -1489,8 +1489,19 @@ static void uv__read(uv_stream_t* stream) {
       }
 #endif
 
+#if defined(__MVS__)
+      if (nread < buflen || (nread == buflen && msg.msg_controllen > 0)) {
+      /* This is what we want to avoid
+	  * recvmsg
+          * nread == buflen && msg.msg_controllen > 0
+          * poll returns read available on socket
+	  * rcvmsg on socket
+	  * nread == 0 && msg.msg_controllen > 0   <-- zOS closes the socket for some reason
+      */
+#else
       /* Return if we didn't fill the buffer, there is no more data to read. */
       if (nread < buflen) {
+#endif
         stream->flags |= UV_STREAM_READ_PARTIAL;
         return;
       }

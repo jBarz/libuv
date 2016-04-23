@@ -7,6 +7,9 @@ struct _epoll_list* _global_epoll_list[MAX_EPOLL_INSTANCES];
 
 static int _removefd(struct _epoll_list *lst, int fd)
 {
+	if(fd == -1)
+	  return 0;
+
 	int realsize = lst->aio == NULL ? lst->size : lst->size + 1;
         int deletion_point = realsize;                         
         for (int i = 0; i < realsize; ++i)                     
@@ -18,7 +21,7 @@ static int _removefd(struct _epoll_list *lst, int fd)
             }                                                              
         }                                                                  
 
-        if (deletion_point < realsize - 2)                         
+        if (deletion_point < realsize - 1)
         {                                                                  
 	    /* deleting a file descriptor */
             for (int i = deletion_point; i < realsize; ++i)    

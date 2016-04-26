@@ -181,8 +181,8 @@ int uv__tcp_connect(uv_connect_t* req,
     req->aio_connect.aio_cmd = AIO_CONNECT;
     req->aio_connect.aio_cflags |= AIO_OK2COMPIMD;
     req->aio_connect.aio_msgev_qid = handle->loop->msgqid;
-    req->aio_connect_msg.mm_type = AIO_MSG_READ;
-    req->aio_connect_msg.mm_ptr = &handle->io_watcher;
+    req->aio_connect_msg.mm_type = AIO_MSG_CONNECT;
+    req->aio_connect_msg.mm_ptr = req;
     req->aio_connect.aio_msgev_addr = &req->aio_connect_msg;
     req->aio_connect.aio_msgev_size = sizeof(req->aio_connect_msg.mm_ptr);
     req->aio_connect.aio_sockaddrlen = addrlen;

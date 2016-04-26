@@ -29,6 +29,7 @@
 #define AIO_MSG_READ 1
 #define AIO_MSG_WRITE 2
 #define AIO_MSG_ACCEPT 3
+#define AIO_MSG_CONNECT 4
 
 #define UV__ZAIO_READING 1
 #define UV__ZAIO_WRITING 2

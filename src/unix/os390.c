@@ -722,7 +722,7 @@ int async_message(uv_loop_t* loop) {
 	  if (msglen == -1) {
 	    break;
 	  }
-          assert(msgin[i].mm_type == AIO_MSG_READ || msgin[i].mm_type == AIO_MSG_WRITE || msgin[i].mm_type == AIO_MSG_ACCEPT);
+          assert(msgin[i].mm_type == AIO_MSG_READ || msgin[i].mm_type == AIO_MSG_WRITE || msgin[i].mm_type == AIO_MSG_ACCEPT || msgin[i].mm_type == AIO_MSG_CONNECT);
 	  ++nevents;
         }
 
@@ -766,7 +766,7 @@ int async_message(uv_loop_t* loop) {
 			watcher->cb(loop, watcher, flags);
 			continue;
 		}
-		else if(msgin[i].mm_type == AIO_MSG_WRITE && ((uv_req_t*)msgin[i].mm_ptr)->type == UV_WRITE)
+		else if(msgin[i].mm_type == AIO_MSG_WRITE)
 		{
 			int flags=0;
 			uv_write_t *req = (uv_write_t*)msgin[i].mm_ptr;
@@ -803,8 +803,48 @@ int async_message(uv_loop_t* loop) {
 			watcher->cb(loop, watcher, flags);
 			continue;
 		}
-		else
+		else if(msgin[i].mm_type == AIO_MSG_CONNECT)
+		{
+			int flags=0;
+			uv_connect_t *req = (uv_connect_t*)msgin[i].mm_ptr;
+			uv__io_t *watcher = &req->handle->io_watcher;
+			/* Skip invalidated events, see uv__platform_invalidate_fd */
+			int fd = req->aio_connect.aio_fildes;
+			printf("JBAR got AIO_MSG_CONNECT for handle %p fd=%d\n", req->handle, fd);
+
+			/* if stream is closing, we don't have to call callbacks because they have already
+			   been invoked with rc=ECANCELED */
+			//if(req->handle->flags & UV_CLOSING)
+				//printf("JBAR stale event\n");
+				//return 0;  /* closed stream could have aio_read events that slip through */
+
+			printf("JBAR got aio_status=%d\n", req->handle->aio_status);
+			assert(req->handle->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
+			req->handle->aio_status &= ~UV__ZAIO_WRITING;
+
+			if ((req->handle->flags & UV_CLOSING) && !(req->handle->aio_status & UV__ZAIO_READING))
+				flags = UV__POLLHUP;
+			else
+				flags = UV__POLLOUT;
+
+			/* move this at the head of the write queue because the callback assumes that 
+			   this event belongs to the head of the write queue */ 
+			printf("JBAR callback called for connect request fd=%d req=%p aio_status=%d\n", fd, req, req->handle->aio_status);
+/*
+                       if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
+                       {
+                               QUEUE_REMOVE(&req->queue);
+                               QUEUE_INSERT_HEAD(&req->handle->write_queue, &req->queue);
+                       }
+*/
+
+			watcher->cb(loop, watcher, flags);
+			continue;
+		}
+		else {
+			printf("JBAR msgtype=%d request type=%d\n", msgin[i].mm_type, ((uv_req_t*)msgin[i].mm_ptr)->type);
 			assert(0 && "unexpected message\n");
+	}
 
 	}
 	return nevents;

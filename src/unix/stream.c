@@ -2065,11 +2065,14 @@ int uv_read_stop(uv_stream_t* stream) {
 #endif
 
 #if defined(__MVS__)
-  if (stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING))
+  if (stream->type == UV_TCP && stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING))
+    uv__handle_stop(stream);
+  else if (!uv__io_active(&stream->io_watcher, UV__POLLOUT))
+    uv__handle_stop(stream);
 #else
   if (!uv__io_active(&stream->io_watcher, POLLOUT))
-#endif
     uv__handle_stop(stream);
+#endif
   uv__stream_osx_interrupt_select(stream);
 
   stream->read_cb = NULL;

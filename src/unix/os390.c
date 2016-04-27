@@ -693,22 +693,18 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
 }
 
 int uv__io_check_fd(uv_loop_t* loop, int fd) {
-  struct uv__epoll_event e;
-  int rc;
 
-  e.events = UV__EPOLLIN;
-  e.data = -1;
+  struct pollfd p[1];
+  p[0].fd = fd;
+  p[0].events = 0 | POLLIN;
 
-  rc = 0;
-  if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_ADD, fd, &e))
-    if (errno != EEXIST)
-      rc = -errno;
-
-  if (rc == 0)
-    if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, fd, &e))
+  if (poll(p, 1, 0) == -1)
       abort();
 
-  return rc;
+  if (p[0].revents & POLLNVAL)
+    return -1;
+
+  return 0;
 }
 
 int async_message(uv_loop_t* loop) {

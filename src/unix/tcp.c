@@ -64,10 +64,6 @@ int uv_tcp_init_ex(uv_loop_t* loop, uv_tcp_t* tcp, unsigned int flags) {
   if (flags & ~0xFF)
     return -EINVAL;
 
-#if defined(__MVS__)
-  tcp->aio_accepts = NULL;
-#endif
-
   uv__stream_init(loop, (uv_stream_t*)tcp, UV_TCP);
 
   /* If anything fails beyond this point we need to remove the handle from
@@ -361,29 +357,23 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   tcp->io_watcher.cb = uv__server_io;
 
 #if defined(__MVS__)
-  int numberOfAioAccepts = backlog <= 0 ? 1 : backlog;
-  tcp->aio_accepts = (struct AioAcceptCb*)uv__malloc(numberOfAioAccepts * sizeof(struct AioAcceptCb));
-  memset(tcp->aio_accepts, 0, numberOfAioAccepts * sizeof(struct AioAcceptCb));
+  memset(&tcp->aio_read, 0, sizeof(struct aiocb));
 
-  for (int i = 0; i < numberOfAioAccepts; ++i) {
-    tcp->aio_accepts[i].aioCb.aio_fildes = tcp->io_watcher.fd;
-    tcp->aio_accepts[i].aioCb.aio_notifytype = AIO_MSGQ;
-    tcp->aio_accepts[i].aioCb.aio_cmd = AIO_ACCEPT;
-    tcp->aio_accepts[i].aioCb.aio_msgev_qid = tcp->loop->msgqid;
-    tcp->aio_accepts[i].aioMsg.mm_type = AIO_MSG_ACCEPT;
-    tcp->aio_accepts[i].aioMsg.mm_ptr = &tcp->aio_accepts[i];
+  tcp->aio_read.aio_fildes = tcp->io_watcher.fd;
+  tcp->aio_read.aio_notifytype = AIO_MSGQ;
+  tcp->aio_read.aio_cmd = AIO_ACCEPT;
+  tcp->aio_read.aio_msgev_qid = tcp->loop->msgqid;
+  tcp->aio_read_msg.mm_type = AIO_MSG_ACCEPT;
+  tcp->aio_read_msg.mm_ptr = &tcp->io_watcher;
 
-    tcp->aio_accepts[i].aioCb.aio_msgev_addr = &tcp->aio_accepts[i].aioMsg;
-    tcp->aio_accepts[i].aioCb.aio_msgev_size = sizeof(tcp->aio_accepts[i].aioMsg.mm_ptr);
-    tcp->aio_accepts[i].stream = tcp;
-    int rv, rc, rsn;
-    ZASYNC(sizeof(struct aiocb), &tcp->aio_accepts[i].aioCb, &rv, &rc, &rsn);
-    //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_accepts[i].aioCb.aio_fildes, rv, rc, rsn);
-    if (rv == -1)
-      return -rc;
-    else
-      tcp->accept_count++;
-  }
+  tcp->aio_read.aio_msgev_addr = &tcp->aio_read_msg;
+  tcp->aio_read.aio_msgev_size = sizeof(tcp->aio_read_msg.mm_ptr);
+  int rv, rc, rsn;
+  ZASYNC(sizeof(struct aiocb), &tcp->aio_read, &rv, &rc, &rsn);
+  if (rv == -1)
+    return -rc;
+  else
+    tcp->aio_status |= UV__ZAIO_READING;
 #else
   uv__io_start(tcp->loop, &tcp->io_watcher, POLLIN);
 #endif
@@ -474,8 +464,4 @@ int uv_tcp_simultaneous_accepts(uv_tcp_t* handle, int enable) {
 
 void uv__tcp_close(uv_tcp_t* handle) {
   uv__stream_close((uv_stream_t*)handle);
-
-#if defined(__MVS__)  
-  free(handle->aio_accepts);
-#endif
 }

@@ -731,23 +731,11 @@ int async_message(uv_loop_t* loop) {
 			uv__io_t *watcher;
 			uv_tcp_t* stream;
 
-			if (msgin[i].mm_type == AIO_MSG_ACCEPT) {
-			  struct AioAcceptCb *aioAcceptCb = (struct AioAcceptCb*)msgin[i].mm_ptr;
-			  stream = (uv_tcp_t*)aioAcceptCb->stream;
-			  watcher = &stream->io_watcher;
-			  stream->aio_accept_active = aioAcceptCb;
+			watcher = (uv__io_t*)msgin[i].mm_ptr;
+			stream = container_of(watcher, uv_stream_t, io_watcher);
 
-			  assert(stream->accept_count > 0);
-			  stream->accept_count--;
-			}
-			else {
-			  watcher = (uv__io_t*)msgin[i].mm_ptr;
-			  stream = container_of(watcher, uv_stream_t, io_watcher);
-
-			  assert(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
-			  stream->aio_status &= ~UV__ZAIO_READING;
-
-			}
+			assert(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
+			stream->aio_status &= ~UV__ZAIO_READING;
 			//printf("JBAR got AIO_MSG_READ\n");
 
 			if (stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)

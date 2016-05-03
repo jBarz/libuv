@@ -533,7 +533,7 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   {
     /* This write event has returned after the user has called uv_close */
     if ( (events & UV__POLLOUT | UV__POLLHUP) && (stream->flags & UV_CLOSING)) {
-      if (((uv_tcp_t*)stream)->accept_count == 0) {
+      if (!(stream->aio_status & UV__ZAIO_READING)) {
         //printf("JBAR taking handle out of loop\n");
         uv__handle_stop((uv_handle_t*)stream);
         uv__make_close_pending((uv_handle_t*)stream);
@@ -548,7 +548,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(events == POLLIN);
 
 #if defined(__MVS__)
-  int is_next_connection_available = 1;
   if(stream->type != UV_TCP)
     uv__io_start(stream->loop, &stream->io_watcher, UV__POLLIN);
 #else
@@ -567,36 +566,15 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 #endif /* defined(UV_HAVE_KQUEUE) */
 
 #if defined(__MVS__)
-    if((stream->type == UV_TCP) && !is_next_connection_available)
-      break;
-
     if(stream->type == UV_TCP) {
     /* capture error state of the prior aio accept */
       int aio_accept_err=-1;
-      uv_tcp_t *tcp = (uv_tcp_t*)stream;
-      aio_accept_err = aio_error(&tcp->aio_accept_active->aioCb);
+      aio_accept_err = aio_error(&stream->aio_read);
       if(aio_accept_err ==  0)
-        aio_accept_err = aio_return(&tcp->aio_accept_active->aioCb);
+        aio_accept_err = aio_return(&stream->aio_read);
       else
         aio_accept_err = -aio_accept_err;
  
-      /* we know that a connection is availble for accept. 
-       start polling for the next connection */
-      if(!(tcp->flags & UV_CLOSING)) {
-        tcp->aio_accept_active->aioCb.aio_cflags |= AIO_OK2COMPIMD;
-        int rv, rc, rsn;
-        ZASYNC(sizeof(tcp->aio_accept_active->aioCb), &tcp->aio_accept_active->aioCb, &rv, &rc, &rsn);
-        //printf("JBAR issued aio_accept for fd=%d , rv=%d, rc=%d, rsn=%d\n", tcp->aio_accept_active->aioCb.aio_fildes, rv, rc, rsn);
-        assert(rv >= 0);
-        if(rv == 0) {
-	  /* next connection is not immediately available */
-	  /* so after processing the current connection, it will break out of the loop */
-	  /* We will get a message notification for anything new */
-          is_next_connection_available = 0;
-          tcp->accept_count++;
-        }
-      }
-
       err = aio_accept_err;
     }
     else
@@ -624,7 +602,17 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 //printf("JBAR before connection_cb err=%d\n", err);
     UV_DEC_BACKLOG(w)
     stream->accepted_fd = err;
+    
+#if defined(__MVS__)
+    if(stream->type == UV_TCP) {
+      stream->aio_read.aio_cflags |= AIO_OK2COMPIMD;
+      stream->connection_cb(stream, 0);
+      stream->aio_read.aio_cflags &= ~AIO_OK2COMPIMD;
+    } else
+      stream->connection_cb(stream, 0);
+#else
     stream->connection_cb(stream, 0);
+#endif
 //printf("JBAR after connection_cb accepted_fd=%d\n", stream->accepted_fd);
     if (stream->accepted_fd != -1) {
       /* The user hasn't yet accepted called uv_accept() */
@@ -636,6 +624,11 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 #endif
       return;
     }
+
+#if defined(__MVS__)
+    if (stream->aio_status & UV__ZAIO_READING)
+      return;
+#endif
 
     if (stream->type == UV_TCP && (stream->flags & UV_TCP_SINGLE_ACCEPT)) {
       /* Give other processes a chance to accept connections. */
@@ -712,8 +705,17 @@ done:
     server->accepted_fd = -1;
     if (err == 0)
 #if defined(__MVS__)
-      if(server->type != UV_TCP) 
-        uv__io_start(server->loop, &server->io_watcher, POLLIN);
+    if(server->type != UV_TCP) 
+      uv__io_start(server->loop, &server->io_watcher, POLLIN);
+    else if(!(server->flags & (UV_CLOSING | UV_CLOSED))){
+      if(!(server->aio_status & UV__ZAIO_READING)) {
+        int rv, rc, rsn;
+        ZASYNC(sizeof(server->aio_read), &server->aio_read, &rv, &rc, &rsn);
+        assert(rv >= 0);
+	if(rv == 0)
+          server->aio_status |= UV__ZAIO_READING;
+      }
+    }
 #else
       uv__io_start(server->loop, &server->io_watcher, POLLIN);
 #endif

@@ -45,12 +45,6 @@ struct AioMsg{         /* The I/O Complete Message                */
         void *mm_ptr; /* Msg text: identifies the client   */
 };
 
-struct AioAcceptCb{
-  struct aiocb aioCb;
-  struct AioMsg aioMsg;
-  void *stream;
-};
-
 #define UV_PLATFORM_FS_EVENT_FIELDS                                           \
   void* watchers[2];                                                          \
   int wd;                                                                     \
@@ -60,9 +54,6 @@ struct AioAcceptCb{
 
 #define UV_TCP_PRIVATE_PLATFORM_FIELDS                                        \
     int is_bound;							      \
-    int accept_count;							      \
-    struct AioAcceptCb *aio_accepts;                                          \
-    struct AioAcceptCb *aio_accept_active;                                                    \
 
 #define UV_PLATFORM_WRITE_FIELDS                                              \
     struct aiocb aio_write;                                                   \

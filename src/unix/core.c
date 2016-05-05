@@ -390,14 +390,6 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   if (loop->stop_flag != 0)
     loop->stop_flag = 0;
 
-#if defined(__MVS__)
-  if (loop->msgqid > 0) {
-    msgctl(loop->msgqid, IPC_RMID, NULL);
-    uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_DEL, loop->msgqid, NULL);
-    loop->msgqid = -1;
-  }
-#endif
-
   return r;
 }
 

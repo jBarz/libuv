@@ -65,6 +65,7 @@ struct AioMsg{         /* The I/O Complete Message                */
     struct AioMsg aio_read_msg;                                               \
     struct AioMsg aio_cancel_msg;                                            \
     int aio_status;                                                          \
+    char bufsml[4];                                                          \
 
 #define UV_PLATFORM_CONNECT_FIELDS				              \
     struct aiocb aio_connect;                                                 \

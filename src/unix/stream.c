@@ -1347,10 +1347,16 @@ static void uv__read(uv_stream_t* stream) {
 #if defined (__MVS__)
     if(stream->type == UV_TCP)
     {
-	//printf("JBAR aio_buf=%s\n", stream->aio_read.aio_buf);
-	buf.base = stream->aio_read.aio_buf;
-	buf.len = stream->aio_read.aio_nbytes;
-	//printf("JBAR aio_nbytes =%d\n", stream->aio_read.aio_nbytes);
+	if(stream->aio_read.aio_buf == stream->bufsml) {
+	  stream->alloc_cb((uv_handle_t*)stream, sizeof(stream->bufsml), &buf);
+	  memcpy(buf.base, stream->bufsml, sizeof(stream->bufsml));
+	}
+	else {
+	  //printf("JBAR aio_buf=%s\n", stream->aio_read.aio_buf);
+	  buf.base = stream->aio_read.aio_buf;
+	  buf.len = stream->aio_read.aio_nbytes;
+	  //printf("JBAR aio_nbytes =%d\n", stream->aio_read.aio_nbytes);
+	}
     }
     else
       stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
@@ -2016,12 +2022,9 @@ int uv_read_start(uv_stream_t* stream,
     stream->aio_read_msg.mm_ptr = &stream->io_watcher;
     stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
     stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
-    alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
-    if (buf.len == 0)
-      return -ENOMEM;
-    stream->aio_read.aio_buf = buf.base;
+    stream->aio_read.aio_buf = stream->bufsml;
     stream->aio_read.aio_offset = 0;
-    stream->aio_read.aio_nbytes = buf.len;
+    stream->aio_read.aio_nbytes = sizeof(stream->bufsml);;
     int rv, rc, rsn;
     ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
     //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);

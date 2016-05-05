@@ -2194,6 +2194,8 @@ void uv__stream_close(uv_stream_t* handle) {
   if (handle->type == UV_TCP) {
     if (!(handle->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING)) && QUEUE_EMPTY(&handle->write_completed_queue))
       uv__make_close_pending((uv_handle_t*)handle);
+    else if(!uv__has_ref(handle))
+      uv__make_close_pending((uv_handle_t*)handle);
   }
   else
     assert(!uv__io_active(&handle->io_watcher, POLLIN | POLLOUT));

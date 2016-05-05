@@ -533,7 +533,7 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   {
     /* This write event has returned after the user has called uv_close */
     if ( (events & UV__POLLOUT | UV__POLLHUP) && (stream->flags & UV_CLOSING)) {
-      if (!(stream->aio_status & UV__ZAIO_READING)) {
+      if (uv__has_ref(stream) && !(stream->aio_status & UV__ZAIO_READING)) {
         //printf("JBAR taking handle out of loop\n");
         uv__handle_stop((uv_handle_t*)stream);
         uv__make_close_pending((uv_handle_t*)stream);
@@ -1576,7 +1576,7 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   {
     /* This write event has returned after the user has called uv_close */
     if ( (events & UV__POLLOUT | UV__POLLHUP) && (stream->flags & UV_CLOSING)) {
-      if (!(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING))) {
+      if (uv__has_ref(stream) && !(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING))) {
         //printf("JBAR taking handle out of loop\n");
         uv__handle_stop((uv_handle_t*)stream);
         uv__make_close_pending((uv_handle_t*)stream);

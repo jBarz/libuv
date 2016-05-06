@@ -842,6 +842,8 @@ static void uv__write_req_finish(uv_write_t* req) {
       assert(rv==0);
       stream->aio_status |= UV__ZAIO_WRITING;
     }
+    else if (req->error)
+      uv__io_feed(stream->loop, &stream->io_watcher);
   }
   else
     uv__io_feed(stream->loop, &stream->io_watcher);
@@ -1870,17 +1872,20 @@ int uv_write2(uv_write_t* req,
     req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
     int rv, rc, rsn;
     ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-    //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);
-    if (rv == 1) {
-    /* Synchronous write */
+    printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);fflush(stdout);
+    if(rv == 0)
+      /* Asynchronous write */
+      stream->aio_status |= UV__ZAIO_WRITING;
+    else if(rv == -1) {
+      req->aio_write.aio_rv = rv;
+      req->aio_write.aio_rc = rc;
+      uv__write(stream);
+    }
+    else {
+      /* Synchronous write or failure */
       uv__write(stream);
       uv__io_feed(stream->loop, &stream->io_watcher);
     }
-    else if (rv < 0)
-      return -rc;
-    else
-      /* Asynchronous write */
-      stream->aio_status |= UV__ZAIO_WRITING;
   }
 #endif
   else if (empty_queue) {

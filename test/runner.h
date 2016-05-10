@@ -63,8 +63,13 @@ typedef struct {
 #define TEST_DECLARE(name)                          \
   int run_test_##name(void);
 
+#if defined(__MVS__)
+#define TEST_ENTRY(name)                            \
+    { #name, #name, &run_test_##name, 0, 0, 15000 },
+#else
 #define TEST_ENTRY(name)                            \
     { #name, #name, &run_test_##name, 0, 0, 5000 },
+#endif
 
 #define TEST_ENTRY_CUSTOM(name, is_helper, show_output, timeout) \
     { #name, #name, &run_test_##name, is_helper, show_output, timeout },

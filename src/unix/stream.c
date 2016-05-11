@@ -1872,7 +1872,7 @@ int uv_write2(uv_write_t* req,
     req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
     int rv, rc, rsn;
     ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-    printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);fflush(stdout);
+    //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);fflush(stdout);
     if(rv == 0)
       /* Asynchronous write */
       stream->aio_status |= UV__ZAIO_WRITING;

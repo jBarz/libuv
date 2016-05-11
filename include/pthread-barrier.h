@@ -43,6 +43,12 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
   2 * sizeof(sem_t) + \
   2 * sizeof(unsigned int) - \
   sizeof(void *)
+#elif defined(__MVS__)
+# define UV_BARRIER_STRUCT_PADDING \
+  sizeof(pthread_mutex_t) + \
+  2 * sizeof(int) + \
+  2 * sizeof(unsigned int) - \
+  sizeof(void *)
 #endif
 
 typedef struct {

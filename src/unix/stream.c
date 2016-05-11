@@ -532,7 +532,7 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   if (stream->type == UV_TCP)
   {
     /* This write event has returned after the user has called uv_close */
-    if ( (events & UV__POLLOUT | UV__POLLHUP) && (stream->flags & UV_CLOSING)) {
+    if ( (events & (POLLOUT | POLLHUP)) && (stream->flags & UV_CLOSING)) {
       if (uv__has_ref(stream) && !(stream->aio_status & UV__ZAIO_READING)) {
         //printf("JBAR taking handle out of loop\n");
         uv__handle_stop((uv_handle_t*)stream);
@@ -545,13 +545,13 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 
   assert(stream->accepted_fd == -1);
   assert(!(stream->flags & UV_CLOSING));
-  assert(events == POLLIN);
+  assert(events & POLLIN);
 
 #if defined(__MVS__)
   if(stream->type != UV_TCP)
-    uv__io_start(stream->loop, &stream->io_watcher, UV__POLLIN);
+    uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
 #else
-  uv__io_start(stream->loop, &stream->io_watcher, UV__POLLIN);
+  uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
 #endif
 
   /* connection_cb can close the server socket while we're
@@ -1110,7 +1110,7 @@ start:
     assert(!(stream->flags & UV_STREAM_BLOCKING));
 
     /* We're not done. */
-    uv__io_start(stream->loop, &stream->io_watcher, UV__POLLOUT);
+    uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
   }
 #else
   /* Only non-blocking streams should use the write_watcher. */
@@ -1118,6 +1118,7 @@ start:
 
   /* We're not done. */
   uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
+#endif
 
   /* Notify select() thread about state change */
   uv__stream_osx_interrupt_select(stream);
@@ -1583,7 +1584,7 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   if (stream->type == UV_TCP)
   {
     /* This write event has returned after the user has called uv_close */
-    if ( (events & UV__POLLOUT | UV__POLLHUP) && (stream->flags & UV_CLOSING)) {
+    if ( (events & POLLOUT | POLLHUP) && (stream->flags & UV_CLOSING)) {
       if (uv__has_ref(stream) && !(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING))) {
         //printf("JBAR taking handle out of loop\n");
         uv__handle_stop((uv_handle_t*)stream);
@@ -1594,7 +1595,7 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   }
 
   if(stream->type == UV_TCP)
-    assert(!(stream->flags & UV_CLOSING) || ((stream->flags & UV_CLOSING) && (events & UV__POLLHUP )));
+    assert(!(stream->flags & UV_CLOSING) || ((stream->flags & UV_CLOSING) && (events & POLLHUP )));
   else
     assert(!(stream->flags & UV_CLOSING));
 #else
@@ -2077,7 +2078,7 @@ int uv_read_stop(uv_stream_t* stream) {
 #if defined(__MVS__)
   if (stream->type == UV_TCP && stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING))
     uv__handle_stop(stream);
-  else if (!uv__io_active(&stream->io_watcher, UV__POLLOUT))
+  else if (!uv__io_active(&stream->io_watcher, POLLOUT))
     uv__handle_stop(stream);
 #else
   if (!uv__io_active(&stream->io_watcher, POLLOUT))

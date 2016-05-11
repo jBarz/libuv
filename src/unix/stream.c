@@ -1350,8 +1350,8 @@ static void uv__read(uv_stream_t* stream) {
     if(stream->type == UV_TCP)
     {
 	if(stream->aio_read.aio_buf == stream->bufsml) {
-	  stream->alloc_cb((uv_handle_t*)stream, sizeof(stream->bufsml), &buf);
-	  memcpy(buf.base, stream->bufsml, sizeof(stream->bufsml));
+	  stream->alloc_cb((uv_handle_t*)stream, stream->aio_read.aio_nbytes, &buf);
+	  memcpy(buf.base, stream->bufsml, stream->aio_read.aio_nbytes);
 	}
 	else {
 	  //printf("JBAR aio_buf=%s\n", stream->aio_read.aio_buf);

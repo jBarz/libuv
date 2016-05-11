@@ -742,11 +742,11 @@ int async_message(uv_loop_t* loop) {
 			//printf("JBAR got AIO_MSG_READ\n");
 
 			if (stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
-				flags = UV__POLLHUP;	// we have already read eof. So hangup */ 
+				flags = POLLHUP;	// we have already read eof. So hangup */ 
 			else if ((stream->flags & UV_CLOSING) && !(stream->aio_status & (UV__ZAIO_WRITING | UV__ZAIO_READING)))
-				flags = UV__POLLHUP;
+				flags = POLLHUP;
 			else
-				flags = UV__POLLIN;
+				flags = POLLIN;
 			
 			int fd = watcher->fd;
 			//printf("JBAR read callback called for fd=%d pending=%d\n", fd, stream->aio_pending);
@@ -772,9 +772,9 @@ int async_message(uv_loop_t* loop) {
 			req->handle->aio_status &= ~UV__ZAIO_WRITING;
 
 			if ((req->handle->flags & UV_CLOSING) && !(req->handle->aio_status & UV__ZAIO_READING))
-				flags = UV__POLLHUP;
+				flags = POLLHUP;
 			else
-				flags = UV__POLLOUT;
+				flags = POLLOUT;
 
 			/* move this at the head of the write queue because the callback assumes that 
 			   this event belongs to the head of the write queue */ 
@@ -810,9 +810,9 @@ int async_message(uv_loop_t* loop) {
 			req->handle->aio_status &= ~UV__ZAIO_WRITING;
 
 			if ((req->handle->flags & UV_CLOSING) && !(req->handle->aio_status & UV__ZAIO_READING))
-				flags = UV__POLLHUP;
+				flags = POLLHUP;
 			else
-				flags = UV__POLLOUT;
+				flags = POLLOUT;
 
 			/* move this at the head of the write queue because the callback assumes that 
 			   this event belongs to the head of the write queue */ 
@@ -1003,7 +1003,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 			 * the current watcher. Also, filters out events that users has not
 			 * requested us to watch.
 			 */
-			pe->events &= w->pevents | UV__POLLERR | UV__POLLHUP;
+			pe->events &= w->pevents | POLLERR | POLLHUP;
 
 			/* Work around an epoll quirk where it sometimes reports just the
 			 * EPOLLERR or EPOLLHUP event.  In order to force the event loop to

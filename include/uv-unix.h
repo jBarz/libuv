@@ -38,7 +38,6 @@
 
 #ifndef __MVS__
 #include <semaphore.h>
-#include "pthread-fixes.h"
 #endif
 #include <pthread.h>
 #include <signal.h>

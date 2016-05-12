@@ -1517,11 +1517,7 @@ TEST_IMPL(spawn_reads_child_path) {
   for (len = strlen(exepath);
        exepath[len - 1] != '/' && exepath[len - 1] != '\\';
        len--);
-#ifdef __MVS__
-  strcpy(file, exepath);
-#else
   strcpy(file, exepath + len);
-#endif
   exepath[len] = 0;
   strcpy(path, "PATH=");
   strcpy(path + 5, exepath);

@@ -534,7 +534,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     /* This write event has returned after the user has called uv_close */
     if ( (events & (POLLOUT | POLLHUP)) && (stream->flags & UV_CLOSING)) {
       if (uv__has_ref(stream) && !(stream->aio_status & UV__ZAIO_READING)) {
-        //printf("JBAR taking handle out of loop\n");
         uv__handle_stop((uv_handle_t*)stream);
         uv__make_close_pending((uv_handle_t*)stream);
       }
@@ -599,7 +598,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       continue;
     }
 
-//printf("JBAR before connection_cb err=%d\n", err);
     UV_DEC_BACKLOG(w)
     stream->accepted_fd = err;
     
@@ -613,7 +611,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 #else
     stream->connection_cb(stream, 0);
 #endif
-//printf("JBAR after connection_cb accepted_fd=%d\n", stream->accepted_fd);
     if (stream->accepted_fd != -1) {
       /* The user hasn't yet accepted called uv_accept() */
 #if defined(__MVS__)
@@ -665,7 +662,6 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
       ((uv_tcp_t*)client)->is_bound = 1;
       client->aio_read.aio_fildes = server->accepted_fd;
 #endif
-    //printf("JBAR just accepted tcp fd=%d by server fd=%d\n", uv__stream_fd(client), uv__stream_fd(server)); 
       break;
 
     case UV_UDP:
@@ -778,7 +774,6 @@ static void uv__drain(uv_stream_t* stream) {
     err = 0;
     if (shutdown(uv__stream_fd(stream), SHUT_WR))
       err = -errno;
-    //printf("JBAR shutting down fd=%d in drain\n", (uv__stream_fd(stream)));
 
     if (err == 0)
       stream->flags |= UV_STREAM_SHUT;
@@ -823,7 +818,6 @@ static void uv__write_req_finish(uv_write_t* req) {
    * callback called in the near future.
    */
   QUEUE_INSERT_TAIL(&stream->write_completed_queue, &req->queue);
-//printf("JBAR add write requeust fd=%d to pending for next loop iteration\n", stream->io_watcher.fd);
 
 #if defined(__MVS__)
   if (stream->type == UV_TCP) {
@@ -838,7 +832,6 @@ static void uv__write_req_finish(uv_write_t* req) {
       req_next->aio_write.aio_msgev_size = sizeof(req_next->aio_write_msg.mm_ptr);
       int rv, rc, rsn;
       ZASYNC(sizeof(req_next->aio_write), &req_next->aio_write, &rv, &rc, &rsn);
-      //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req_next->aio_write.aio_fildes, rv, rc, rsn);
       assert(rv==0);
       stream->aio_status |= UV__ZAIO_WRITING;
     }
@@ -961,7 +954,6 @@ start:
 #endif
   } else {
     do {
-	//printf("JBAR writing data to fd=%d\n", uv__stream_fd(stream));
 #if defined (__MVS__)
       if(req->handle->type == UV_TCP) {
         errno = aio_error(&req->aio_write);
@@ -969,7 +961,6 @@ start:
 	  n = aio_return(&req->aio_write);
 	else
 	  n = -1;
-	//printf("JBAR writing async fd=%d, n=%d, errno=%d\n", uv__stream_fd(stream), n, errno);
       }
       else
       {
@@ -1095,9 +1086,7 @@ start:
       }
       req->aio_write.aio_msgev_qid = req->handle->loop->msgqid;
       int rv, rc, rsn;
-      //printf("JBAR writeindex=%d nbytes=%d\n", req->write_index, req->aio_write.aio_nbytes);
       ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-      //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__, req->aio_write.aio_fildes, rv, rc, rsn);
 
       /* Write will happen asynchronously */
       assert(rv==0);
@@ -1200,11 +1189,6 @@ static void uv__stream_eof(uv_stream_t* stream, const uv_buf_t* buf) {
 #if defined(__MVS__)
   if(stream->type == UV_TCP)
   {
-    //printf("JBAR eof for fd = %d\n",  stream->aio_read.aio_fildes);
-    /* no need to stop POLLIN because we haven't issued the next aio_read yet */
-    /* we have just stopped reading and there are no pending writes */
-   // if (QUEUE_EMPTY(&stream->write_queue))
-    //  uv__handle_stop(stream);
   }
   else
   {
@@ -1355,10 +1339,8 @@ static void uv__read(uv_stream_t* stream) {
 	  memcpy(buf.base, stream->bufsml, stream->aio_read.aio_nbytes);
 	}
 	else {
-	  //printf("JBAR aio_buf=%s\n", stream->aio_read.aio_buf);
 	  buf.base = stream->aio_read.aio_buf;
 	  buf.len = stream->aio_read.aio_nbytes;
-	  //printf("JBAR aio_nbytes =%d\n", stream->aio_read.aio_nbytes);
 	}
     }
     else
@@ -1386,11 +1368,9 @@ static void uv__read(uv_stream_t* stream) {
 	    nread = aio_return(&stream->aio_read);
 	  else
 	    nread = -1;
-	  //printf("JBAR reading async fd=%d, nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
 	}
 	else
 	{
-	  //printf("JBAR reading sync fd=%d\n", uv__stream_fd(stream));
 	  nread = read(uv__stream_fd(stream), buf.base, buf.len);
 	}
 #else
@@ -1485,7 +1465,6 @@ static void uv__read(uv_stream_t* stream) {
 
         int rv, rc, rsn;
         ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-        //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);
         if(rv < 0) {
           stream->read_cb(stream, -rc, &buf);
           return;
@@ -1580,13 +1559,11 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 
 #if defined(__MVS__)
   /* on zOS this could be a sniff read after eof */
-//printf("JBAR stream flags=%d events = %d\n", stream->flags, events);
   if (stream->type == UV_TCP)
   {
     /* This write event has returned after the user has called uv_close */
     if ( (events & POLLOUT | POLLHUP) && (stream->flags & UV_CLOSING)) {
       if (uv__has_ref(stream) && !(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING))) {
-        //printf("JBAR taking handle out of loop\n");
         uv__handle_stop((uv_handle_t*)stream);
         uv__make_close_pending((uv_handle_t*)stream);
       }
@@ -1654,7 +1631,6 @@ static void uv__stream_connect(uv_stream_t* stream) {
   uv_connect_t* req = stream->connect_req;
   socklen_t errorsize = sizeof(int);
 
-//printf("JBAR connected for fd=%d\n", uv__stream_fd(stream));
   assert(stream->type == UV_TCP || stream->type == UV_NAMED_PIPE);
   assert(req);
 
@@ -1728,7 +1704,6 @@ static void uv__stream_connect(uv_stream_t* stream) {
       {
         int rv, rc, rsn;
         ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-        //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);
 	if(rv != 0)
           error = -rc;
         else
@@ -1873,7 +1848,6 @@ int uv_write2(uv_write_t* req,
     req->aio_write.aio_cflags |= AIO_OK2COMPIMD;
     int rv, rc, rsn;
     ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-    //printf("JBAR %s:%d issued aio_write for fd=%d , rv=%d, rc=%d, rsn=%d\n", __FILE__,__LINE__,req->aio_write.aio_fildes, rv, rc, rsn);fflush(stdout);
     if(rv == 0)
       /* Asynchronous write */
       stream->aio_status |= UV__ZAIO_WRITING;
@@ -2033,7 +2007,6 @@ int uv_read_start(uv_stream_t* stream,
     stream->aio_read.aio_nbytes = sizeof(stream->bufsml);;
     int rv, rc, rsn;
     ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-    //printf("JBAR:%d issued aio_read for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_read.aio_fildes, rv, rc, rsn);
     assert(rv==0);
     stream->aio_status |= UV__ZAIO_READING;
   }
@@ -2067,7 +2040,6 @@ int uv_read_stop(uv_stream_t* stream) {
       stream->aio_cancel.aio_nbytes = sizeof(struct aiocb);
       int rv, rc, rsn;
       ZASYNC(sizeof(stream->aio_cancel), &stream->aio_cancel, &rv, &rc, &rsn);
-      //printf("JBAR:%d issued aio_cancel (read) for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, stream->aio_cancel.aio_fildes, rv, rc, rsn);
   }
   else
     uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
@@ -2159,7 +2131,6 @@ void uv__stream_close(uv_stream_t* handle) {
       handle->aio_cancel.aio_msgev_size = sizeof(handle->aio_cancel_msg.mm_ptr);
       int rv, rc, rsn;
       ZASYNC(sizeof(handle->aio_cancel), &handle->aio_cancel, &rv, &rc, &rsn);
-      //printf("JBAR:%d issued aio_cancel for fd=%d , rv=%d, rc=%d, rsn=%d\n", __LINE__, handle->aio_cancel.aio_fildes, rv, rc, rsn);
     }
   }
   else
@@ -2168,7 +2139,6 @@ void uv__stream_close(uv_stream_t* handle) {
   uv__io_close(handle->loop, &handle->io_watcher);
 #endif
 
-  //printf("JBAR uv__stream_close really closing everything fd=%d\n", handle->io_watcher.fd);
 
 #if defined(__MVS__)
   if (handle->type != UV_TCP || !(handle->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING)))

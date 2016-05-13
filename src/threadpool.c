@@ -143,7 +143,6 @@ static void init_once(void) {
   unsigned int i;
   const char* val;
 
-  //printf("JBAR starting worker threads\n");
   nthreads = ARRAY_SIZE(default_threads);
   val = getenv("UV_THREADPOOL_SIZE");
   if (val != NULL)

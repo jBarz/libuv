@@ -10,14 +10,6 @@
 #define UV__EPOLL_CTL_MOD     3
 #define UV__EPOLL_CTL_ADD_MSGQ    4
 
-#define UV__EPOLLIN           1
-#define UV__EPOLLOUT          4
-#define UV__EPOLLERR          8
-#define UV__EPOLLHUP          16
-#define UV__EPOLLRDHUP        0x2000
-#define UV__EPOLLONESHOT      0x40000000
-#define UV__EPOLLET           0x80000000
-
 struct uv__epoll_event {
   uint32_t events;
   uint32_t data;

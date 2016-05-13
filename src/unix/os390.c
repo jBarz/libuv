@@ -298,7 +298,7 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 	if (loop->msgqid == -1)
 		return -errno;
 
-        int events = EPOLLIN;	
+        int events = POLLIN;	
 	uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_ADD_MSGQ, loop->msgqid, &events);
 
 #if 0
@@ -1017,6 +1017,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 			 * requested us to watch.
 			 */
 			pe->events &= w->pevents | POLLERR | POLLHUP;
+printf("JBAR pe->events = %d, w pevents=%d\n", pe->events, w->pevents);
 
 			/* Work around an epoll quirk where it sometimes reports just the
 			 * EPOLLERR or EPOLLHUP event.  In order to force the event loop to
@@ -1033,8 +1034,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 			 * needs to remember the error/hangup event.  We should get that for
 			 * free when we switch over to edge-triggered I/O.
 			 */
-			if (pe->events == UV__EPOLLERR || pe->events == UV__EPOLLHUP)
-				pe->events |= w->pevents & (UV__EPOLLIN | UV__EPOLLOUT);
+			if (pe->events == POLLERR || pe->events == POLLHUP)
+				pe->events |= w->pevents & (POLLIN | POLLOUT);
 
 			//printf("JBAR calling sync cb fd=%d\n", fd);
 			if (pe->events != 0) {

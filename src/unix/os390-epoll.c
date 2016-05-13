@@ -58,11 +58,11 @@ static void _modify(struct _epoll_list *lst, int index, struct epoll_event event
 {
 	struct pollfd *i = &lst->items[index];
         i->events = 0;
-        if(events.events & EPOLLIN)
+        if(events.events & POLLIN)
             i->events |= POLLIN; 
-        if(events.events & EPOLLOUT)
+        if(events.events & POLLOUT)
             i->events |= POLLOUT; 
-        if(events.events & EPOLLHUP)
+        if(events.events & POLLHUP)
             i->events |= POLLHUP; 
     //printf("log: events = %d\n", i->events);
 
@@ -191,20 +191,20 @@ int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout)
 
         if(pfds[i].revents & POLLRDNORM)
         {
-            ev.events = ev.events | EPOLLIN;
+            ev.events = ev.events | POLLIN;
             //printf("log: ev.events=%d\n", ev.events);
             //printf("log: ready for reading data on fd %d\n", ev.data.fd);
         }
         
         if(pfds[i].revents & POLLWRNORM)
         {
-            ev.events = ev.events | EPOLLOUT;
+            ev.events = ev.events | POLLOUT;
             //printf("log: ready to write data on fd %d\n", ev.data.fd);
         }
 
         if(pfds[i].revents & POLLHUP)
         {
-            ev.events = ev.events | EPOLLHUP;
+            ev.events = ev.events | POLLHUP;
 	    pthread_mutex_lock(&lst->lock);
             _removefd(lst, ev.data.fd);
 	    pthread_mutex_unlock(&lst->lock);

@@ -431,12 +431,18 @@ int uv_exepath(char* buffer, size_t* size) {
 
 
 uint64_t uv_get_free_memory(void) {
-	return -1;
+  char *cvt = *CVT_PTR;
+  char * ptr = *((char **) (cvt + CVTRCEP_OFFSET));
+  uint64_t freeram = *((uint64_t*) (ptr + RCEAFC_OFFSET)) * 4;
+  return freeram;
 }
 
 
 uint64_t uv_get_total_memory(void) {
-	return -1;
+  char *cvt = *CVT_PTR;
+  char * ptr = *((char **) (cvt + CVTRCEP_OFFSET));
+  uint64_t totalram = *((uint64_t*) (ptr + RCEPOOL_OFFSET)) * 4;
+  return totalram;
 }
 
 

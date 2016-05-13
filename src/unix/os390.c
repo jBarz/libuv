@@ -285,7 +285,6 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 		if (fd != -1)
 			uv__cloexec(fd, 1);
 	}
-	//printf("JBAR fd=%d\n", fd);
 
 	loop->backend_fd = fd;
 
@@ -293,26 +292,12 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 		return -errno;
 
         loop->msgqid = msgget( IPC_PRIVATE, IPC_CREAT + S_IRUSR + S_IWUSR );
-	//printf("JBAR new msgqid=%d\n", loop->msgqid);
 
 	if (loop->msgqid == -1)
 		return -errno;
 
         int events = POLLIN;	
 	uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_ADD_MSGQ, loop->msgqid, &events);
-
-#if 0
-	ssize_t DrainRV = 0;
-	int DrainedType;
-	while (DrainRV != -1) {
-	printf("JBAR draining queue\n");
-                        DrainRV = msgrcv( loop->msgqid,
-                                        &DrainedType,
-                                        0,            /* Recv just the type field  */
-                                        0,            /* Receive any type message  */
-                                        IPC_NOWAIT + MSG_NOERROR ); /* Don't wait  */
-	}
-#endif
 
 	return 0;
 }
@@ -752,7 +737,6 @@ int async_message(uv_loop_t* loop) {
 
 			assert(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
 			stream->aio_status &= ~UV__ZAIO_READING;
-			//printf("JBAR got AIO_MSG_READ\n");
 
 			if (stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
 				flags = POLLHUP;	// we have already read eof. So hangup */ 
@@ -762,7 +746,6 @@ int async_message(uv_loop_t* loop) {
 				flags = POLLIN;
 			
 			int fd = watcher->fd;
-			//printf("JBAR read callback called for fd=%d pending=%d\n", fd, stream->aio_pending);
 			watcher->cb(loop, watcher, flags);
 			continue;
 		}
@@ -773,13 +756,6 @@ int async_message(uv_loop_t* loop) {
 			uv__io_t *watcher = &req->handle->io_watcher;
 			/* Skip invalidated events, see uv__platform_invalidate_fd */
 			int fd = req->aio_write.aio_fildes;
-			//printf("JBAR got AIO_MSG_WRITE for handle %p fd=%d\n", req->handle, fd);
-
-			/* if stream is closing, we don't have to call callbacks because they have already
-			   been invoked with rc=ECANCELED */
-			//if(req->handle->flags & UV_CLOSING)
-				//printf("JBAR stale event\n");
-				//return 0;  /* closed stream could have aio_read events that slip through */
 
 			assert(req->handle->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
 			req->handle->aio_status &= ~UV__ZAIO_WRITING;
@@ -791,7 +767,6 @@ int async_message(uv_loop_t* loop) {
 
 			/* move this at the head of the write queue because the callback assumes that 
 			   this event belongs to the head of the write queue */ 
-			//printf("JBAR callback called for write request fd=%d req=%p aio_status=%d\n", fd, req, req->handle->aio_status);
 /*
                        if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
                        {
@@ -810,15 +785,7 @@ int async_message(uv_loop_t* loop) {
 			uv__io_t *watcher = &req->handle->io_watcher;
 			/* Skip invalidated events, see uv__platform_invalidate_fd */
 			int fd = req->aio_connect.aio_fildes;
-			printf("JBAR got AIO_MSG_CONNECT for handle %p fd=%d\n", req->handle, fd);
 
-			/* if stream is closing, we don't have to call callbacks because they have already
-			   been invoked with rc=ECANCELED */
-			//if(req->handle->flags & UV_CLOSING)
-				//printf("JBAR stale event\n");
-				//return 0;  /* closed stream could have aio_read events that slip through */
-
-			printf("JBAR got aio_status=%d\n", req->handle->aio_status);
 			assert(req->handle->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
 			req->handle->aio_status &= ~UV__ZAIO_WRITING;
 
@@ -829,7 +796,6 @@ int async_message(uv_loop_t* loop) {
 
 			/* move this at the head of the write queue because the callback assumes that 
 			   this event belongs to the head of the write queue */ 
-			printf("JBAR callback called for connect request fd=%d req=%p aio_status=%d\n", fd, req, req->handle->aio_status);
 /*
                        if(QUEUE_HEAD(&req->handle->write_queue) != &req->queue)
                        {
@@ -842,7 +808,6 @@ int async_message(uv_loop_t* loop) {
 			continue;
 		}
 		else {
-			printf("JBAR msgtype=%d request type=%d\n", msgin[i].mm_type, ((uv_req_t*)msgin[i].mm_ptr)->type);
 			assert(0 && "unexpected message\n");
 	}
 
@@ -875,7 +840,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 	int op;
 	int i;
 
-	//printf("JBAR io_poll timeout=%d\n", timeout);
 	if (loop->nfds == 0) {
 		assert(QUEUE_EMPTY(&loop->watcher_queue));
 		return;
@@ -942,7 +906,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				events,
 				ARRAY_SIZE(events),
 				timeout);
-		//printf("JBAR epoll wait for timeout=%d nfds=%d\n", timeout, nfds); 
 
 		/* Update loop->time unconditionally. It's tempting to skip the update when
 		 * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
@@ -991,7 +954,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 				continue;
 
 			if (fd == loop->msgqid) {
-				//printf("JBAR got message\n");
 				nevents += async_message(loop);
 				continue;
 			}
@@ -1017,7 +979,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 			 * requested us to watch.
 			 */
 			pe->events &= w->pevents | POLLERR | POLLHUP;
-printf("JBAR pe->events = %d, w pevents=%d\n", pe->events, w->pevents);
 
 			/* Work around an epoll quirk where it sometimes reports just the
 			 * EPOLLERR or EPOLLHUP event.  In order to force the event loop to
@@ -1037,7 +998,6 @@ printf("JBAR pe->events = %d, w pevents=%d\n", pe->events, w->pevents);
 			if (pe->events == POLLERR || pe->events == POLLHUP)
 				pe->events |= w->pevents & (POLLIN | POLLOUT);
 
-			//printf("JBAR calling sync cb fd=%d\n", fd);
 			if (pe->events != 0) {
 				w->cb(loop, w, pe->events);
 				nevents++;

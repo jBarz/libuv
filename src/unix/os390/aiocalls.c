@@ -12,6 +12,5 @@ int aio_cancel(int fd)
 	cb.aio_fildes = fd;
 	cb.aio_cmd = AIO_CANCEL;
 	BPX1AIO( sizeof(cb), cb, &rv, &rc, &rsn ); 
-	printf("JBAR: sent aio cancel Errno= %d, Reason= %X\n", rc, rsn);
 	return rv;
 }

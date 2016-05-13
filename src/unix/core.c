@@ -166,7 +166,6 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
     return;
 
   default:
-    //printf("JBAR handle->type=%d\n", handle->type);
     assert(0);
   }
 
@@ -345,12 +344,6 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
   while (r != 0 && loop->stop_flag == 0) {
     uv__update_time(loop);
 
-    //static struct timeval jbart1, jbart2;
-    //jbart1 = jbart2;
-    //gettimeofday(&jbart2, NULL);
-    //printf("JBAR tick time=%d seconds\n", jbart2.tv_sec - jbart1.tv_sec);
-    //printf("JBAR tick\n");
-
     uv__run_timers(loop);
     ran_pending = uv__run_pending(loop);
     uv__run_idle(loop);
@@ -503,7 +496,6 @@ skip:
       return err;
     }
 
-  //printf("JBAR %s:%d server fd=%d now created socket fd=%d\n", __FILE__,__LINE__,sockfd,peerfd);
     return peerfd;
   }
 }
@@ -858,7 +850,6 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
 #endif
 
   if (QUEUE_EMPTY(&w->watcher_queue)){
-     ////printf("JBAR adding handle for fd %d on loop watcher_queue\n", w->fd);
     QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
   }
 
@@ -873,7 +864,6 @@ void uv__io_stop(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(0 == (events & ~(POLLIN | POLLOUT | UV__POLLRDHUP)));
   assert(0 != events);
 
-  ////printf("JBAR uv__io_stop %s:%d %d\n", __FILE__,__LINE__,w->fd);
   if (w->fd == -1)
     return;
 

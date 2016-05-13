@@ -91,7 +91,6 @@ int uv_timer_start(uv_timer_t* handle,
               (struct heap_node*) &handle->heap_node,
               timer_less_than);
   uv__handle_start(handle);
-//printf("JBAR started timer\n");
 
   return 0;
 }

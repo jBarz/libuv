@@ -190,7 +190,6 @@ void uv_pipe_connect(uv_connect_t* req,
     err = -errno;
     goto out;
   }
-  //printf("JBAR sent connection request to pipe\n");
 
   err = 0;
   if (new_sock) {

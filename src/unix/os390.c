@@ -41,6 +41,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <sys/ps.h>
 
 #include <utmpx.h>
 
@@ -216,7 +217,7 @@ static int invokesiv1v2(siv1v2 *info)
 
 	if (CSRSIC == NULL)
 	{
-		//printf("ERROR: fetch failed\n");
+		printf("ERROR: fetch failed\n");
 		return 0;
 	}
 	else
@@ -490,7 +491,13 @@ int uv_get_process_title(char* buffer, size_t size) {
 
 int uv_resident_set_memory(size_t* rss) {
 
+  W_PSPROC buf;
+  memset(&buf, 0x00, sizeof(buf));
+  if(w_getpsent(0, &buf, sizeof(W_PSPROC)) == -1)
 	return -EINVAL;
+
+  *rss = buf.ps_size;
+  return 0;
 }
 
 
@@ -516,8 +523,8 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
 	char *cvt = *CVT_PTR;
 	SystemProcessorInfo zos_proc;
 	getSystemProcessorInfo(&zos_proc, cvt);
-	if (!invokesiv1v2(&info))
-		return -ENOSYS;
+	//if (!invokesiv1v2(&info))
+	//	return -ENOSYS;
 
 	*count = ncpus = zos_proc.online_cpus;
 

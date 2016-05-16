@@ -164,9 +164,13 @@ typedef struct _SystemProcessorInfo
 void getSystemProcessorInfo(SystemProcessorInfo *result, DATA_AREA_PTR cvt)
 {
 	char status_word;
-	DATA_AREA_PTR ptr = {0};
-	ptr.assign = *((DATA_AREA_PTR_ASSIGN_TYPE *) (cvt.deref + CSD_OFFSET));
-	result->online_cpus    = *((int*) (ptr.deref + CSD_NUMBER_ONLINE_CPUS));
+	DATA_AREA_PTR csd = {0}, rmctrct = {0}, cvtopctp = {0};
+	csd.assign 			= *((DATA_AREA_PTR_ASSIGN_TYPE *) (cvt.deref + CSD_OFFSET));
+	cvtopctp.assign 		= *((DATA_AREA_PTR_ASSIGN_TYPE *) (cvt.deref + CVTOPCTP_OFFSET));
+	rmctrct.assign 			= *((DATA_AREA_PTR_ASSIGN_TYPE *) (cvtopctp.deref + RMCTRCT_OFFSET));
+
+	result->online_cpus    		= *((int*) (csd.deref + CSD_NUMBER_ONLINE_CPUS));
+	result->cpu_usage_average       = *((unsigned short int*) (rmctrct.deref + RCTLACS_OFFSET));
 #if 0
 	result->mask_cpu_alive = *((int*) (ptr + CSD_CPU_ALIVE));
 	result->mask_cpu_wlm   = *((int*) (ptr + CSD_CPUS_MANIPULATED_BY_WLM));
@@ -179,7 +183,6 @@ void getSystemProcessorInfo(SystemProcessorInfo *result, DATA_AREA_PTR cvt)
 	ptr = *((char **) (cvt + CVTOPCTP_OFFSET));
 	ptr = *((char **) (ptr + RMCTRCT_OFFSET));
 	result->sample_intervals_count           = *((unsigned short int*) (ptr + RCVCTMC_OFFSET));
-	result->cpu_usage_average               = *((unsigned short int*) (ptr + RCVCPUA_OFFSET));
 	result->cpu_ifa_usage_average           = *((unsigned short int*) (ptr + RCVCPUAA_OFFSET));
 	result->cpu_usage_accumulator           = *((int*) (ptr + RCVCPUC_OFFSET));
 	result->cpu_ifa_usage_accumulator       = *((int*) (ptr + RCVCPUAC_OFFSET));
@@ -225,60 +228,47 @@ static int getZOSCPUCapability(si22v1 *result, int cpu_nr)
 static int invokesiv1v2(siv1v2 *info)
 {
 
-	CSRSI_calltype* CSRSIC;
+	int ret_code;
+	int request = CSRSI_REQUEST_V2CPC_LPAR | CSRSI_REQUEST_V1CPC_MACHINE;
+	memset(info,'\x0',sizeof(info));
 
-	CSRSIC = (CSRSI_calltype *) fetch("CSRSI"); /* load module ERBSMFI */
+	CSRSI(request,
+			0x1040,
+			info,
+			&ret_code);
 
-	if (CSRSIC == NULL)
+	if (ret_code == CSRSI_BADINFOAREALEN)
 	{
-		printf("ERROR: fetch failed\n");
-		return 0;
-	}
-	else
-	{
-		siv1v2 info;
-		int ret_code;
-		int request = CSRSI_REQUEST_V2CPC_LPAR | CSRSI_REQUEST_V1CPC_MACHINE;
-		memset(&info,'\x0',sizeof(info));
-
-		(*CSRSIC)(request,
-				0x1040,
-				&info,
+		memset(info,'\x0',sizeof(*info));
+		CSRSI(request,
+				0x2040,
+				info,
 				&ret_code);
+	}
 
-		if (ret_code == CSRSI_BADINFOAREALEN)
-		{
-			memset(&info,'\x0',sizeof(info));
-			(*CSRSIC)(request,
-					0x2040,
-					&info,
-					&ret_code);
-		}
+	if (ret_code == CSRSI_BADINFOAREALEN)
+	{
+		memset(info,'\x0',sizeof(*info));
+		CSRSI(request,
+				0x3040,
+				info,
+				&ret_code);
+	}
 
-		if (ret_code == CSRSI_BADINFOAREALEN)
-		{
-			memset(&info,'\x0',sizeof(info));
-			(*CSRSIC)(request,
-					0x3040,
-					&info,
-					&ret_code);
-		}
-
-		if (ret_code == CSRSI_BADINFOAREALEN)
-		{
-			memset(&info,'\x0',sizeof(info));
-			(*CSRSIC)(request,
-					0x4040,
-					&info,
-					&ret_code);
-		}
+	if (ret_code == CSRSI_BADINFOAREALEN)
+	{
+		memset(info,'\x0',sizeof(*info));
+		CSRSI(request,
+				0x4040,
+				info,
+				&ret_code);
+	}
 
 
-		if (ret_code != CSRSI_SUCCESS)
-		{
-			memset(&info,'\x0',sizeof(info));
-			return 0;
-		}
+	if (ret_code != CSRSI_SUCCESS)
+	{
+		memset(info,'\x0',sizeof(*info));
+		return 0;
 	}
 
 	return 1;
@@ -533,8 +523,8 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
 	cvt.assign = *(DATA_AREA_PTR_ASSIGN_TYPE*)(CVT_PTR);
 	SystemProcessorInfo zos_proc;
 	getSystemProcessorInfo(&zos_proc, cvt);
-	//if (!invokesiv1v2(&info))
-	//	return -ENOSYS;
+	if (!invokesiv1v2(&info))
+		return -ENOSYS;
 
 	*count = ncpus = zos_proc.online_cpus;
 
@@ -547,9 +537,11 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
 	cpu_info = *cpu_infos;
 	while (idx < ncpus) {
 
-		cpu_info->speed = (int)(getZOSCPUCapability(&(info.siv1v2si22v1),idx) / 1000000);
-		cpu_info->model = "ec12";
-		cpu_info->cpu_times.user = 0;
+		cpu_info->speed = *(int*)(info.siv1v2si22v1.si22v1cpucapability);
+		cpu_info->model = malloc(17);
+		memset(cpu_info->model, '\0', 17);
+		memcpy(cpu_info->model, info.siv1v2si11v1.si11v1cpcmodel, 16);
+		cpu_info->cpu_times.user = zos_proc.cpu_usage_average;
 		cpu_info->cpu_times.sys = 0;
 		cpu_info->cpu_times.idle = 0;
 		cpu_info->cpu_times.irq = 0;

@@ -56,7 +56,7 @@
 #define EQ(a,b)         (strcmp(a,b) == 0)
 
 
-#define CVT_PTR ((char**) 0x10)
+#define CVT_PTR 0x10
 #define CVTEXT2_OFFSET 0x148
 #define CVTLDTO_OFFSET 0x38
 static int MAX_JOBS = 1024;
@@ -122,6 +122,17 @@ static int MAX_JOBS = 1024;
 #define RCTLACS_OFFSET                         0xC4                    /* Long-term average CPU service used by this logical partition, in millions of service units per hour. If this value is above the partition's defined capacity, the partition will be capped. It is calculated using the physical CPU adjustment factor (RCTPCPUA) so it may not match other measures of service which are based on the logical CPU adjustment factor. It is available if the hardware supports LPAR cluster */
 #define RCTPCPUA_OFFSET                        0xD4                    /* Physical CPU adjustment factor (i.e. adjustment factor for converting CPU time to equivalent service in basic-mode with all processors online). */
 
+typedef unsigned DATA_AREA_PTR_ASSIGN_TYPE;
+
+typedef union _DATA_AREA_PTR {
+	struct {
+#if defined(_LP64)
+		DATA_AREA_PTR_ASSIGN_TYPE lower;
+#endif
+		DATA_AREA_PTR_ASSIGN_TYPE assign;
+	};
+	char* deref;
+} DATA_AREA_PTR; 
 
 typedef struct _SystemProcessorInfo
 {
@@ -150,13 +161,15 @@ typedef struct _SystemProcessorInfo
 
 } SystemProcessorInfo;
 
-void getSystemProcessorInfo(SystemProcessorInfo *result, char * cvt)
+void getSystemProcessorInfo(SystemProcessorInfo *result, DATA_AREA_PTR cvt)
 {
 	char status_word;
-	char * ptr = *((char **) (cvt + CSD_OFFSET));
+	DATA_AREA_PTR ptr = {0};
+	ptr.assign = *((DATA_AREA_PTR_ASSIGN_TYPE *) (cvt.deref + CSD_OFFSET));
+	result->online_cpus    = *((int*) (ptr.deref + CSD_NUMBER_ONLINE_CPUS));
+#if 0
 	result->mask_cpu_alive = *((int*) (ptr + CSD_CPU_ALIVE));
 	result->mask_cpu_wlm   = *((int*) (ptr + CSD_CPUS_MANIPULATED_BY_WLM));
-	result->online_cpus    = *((int*) (ptr + CSD_NUMBER_ONLINE_CPUS));
 	result->online_ifas    = *((int*) (ptr + CSD_NUMBER_ONLINE_IFAS));
 
 	status_word = *((char*) (cvt + CVTOSLV3_OFFSET));
@@ -184,6 +197,7 @@ void getSystemProcessorInfo(SystemProcessorInfo *result, char * cvt)
 	result->lpar_capacity                   = result->lpar_capacity*(result->online_cpus + result->online_ifas);
 	result->lpar_capacity                   = result->lpar_capacity*3600.0/1000000.0;
 	result->utilization                     = (result->lpar_service/result->lpar_capacity)*100;
+#endif
 }
 
 static int getIndividualCapabilities(char * buffer, int proc_nr)
@@ -416,17 +430,21 @@ int uv_exepath(char* buffer, size_t* size) {
 
 
 uint64_t uv_get_free_memory(void) {
-  char *cvt = *CVT_PTR;
-  char * ptr = *((char **) (cvt + CVTRCEP_OFFSET));
-  uint64_t freeram = *((uint64_t*) (ptr + RCEAFC_OFFSET)) * 4;
+  DATA_AREA_PTR cvt = {0};
+  DATA_AREA_PTR rcep = {0};
+  cvt.assign = *(DATA_AREA_PTR_ASSIGN_TYPE*)(CVT_PTR);
+  rcep.assign = *(DATA_AREA_PTR_ASSIGN_TYPE*)(cvt.deref + CVTRCEP_OFFSET);
+  uint64_t freeram = *((uint64_t*)(rcep.deref + RCEAFC_OFFSET)) * 4;
   return freeram;
 }
 
 
 uint64_t uv_get_total_memory(void) {
-  char *cvt = *CVT_PTR;
-  char * ptr = *((char **) (cvt + CVTRCEP_OFFSET));
-  uint64_t totalram = *((uint64_t*) (ptr + RCEPOOL_OFFSET)) * 4;
+  DATA_AREA_PTR cvt = {0};
+  DATA_AREA_PTR rcep = {0};
+  cvt.assign = *(DATA_AREA_PTR_ASSIGN_TYPE*)(CVT_PTR);
+  rcep.assign = *(DATA_AREA_PTR_ASSIGN_TYPE*)(cvt.deref + CVTRCEP_OFFSET);
+  uint64_t totalram = *((uint64_t*)(rcep.deref + RCEPOOL_OFFSET)) * 4;
   return totalram;
 }
 
@@ -511,7 +529,8 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
 
 
 	siv1v2 info;
-	char *cvt = *CVT_PTR;
+	DATA_AREA_PTR cvt = {0};
+	cvt.assign = *(DATA_AREA_PTR_ASSIGN_TYPE*)(CVT_PTR);
 	SystemProcessorInfo zos_proc;
 	getSystemProcessorInfo(&zos_proc, cvt);
 	//if (!invokesiv1v2(&info))

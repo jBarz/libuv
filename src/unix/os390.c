@@ -523,8 +523,10 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
 	cvt.assign = *(DATA_AREA_PTR_ASSIGN_TYPE*)(CVT_PTR);
 	SystemProcessorInfo zos_proc;
 	getSystemProcessorInfo(&zos_proc, cvt);
+#ifndef _LP64
 	if (!invokesiv1v2(&info))
 		return -ENOSYS;
+#endif
 
 	*count = ncpus = zos_proc.online_cpus;
 

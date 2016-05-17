@@ -65,7 +65,7 @@ typedef struct {
 
 #if defined(__MVS__)
 #define TEST_ENTRY(name)                            \
-    { #name, #name, &run_test_##name, 0, 0, 15000 },
+    { #name, #name, &run_test_##name, 0, 0, 30000 },
 #else
 #define TEST_ENTRY(name)                            \
     { #name, #name, &run_test_##name, 0, 0, 5000 },

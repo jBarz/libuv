@@ -344,10 +344,6 @@ int uv_exepath(char* buffer, size_t* size) {
 	if (buffer == NULL || size == NULL || *size == 0)
 		return -EINVAL;
 
-	//pi.pi_pid = getpid();
-	//res = getargs(&pi, sizeof(pi), args, sizeof(args));
-	//if (res < 0) 
-	//return -EINVAL;
 	char *exe_path=__getenv("EXE_PATH");
 	if (exe_path == NULL) 
 		return -EINVAL;
@@ -806,7 +802,7 @@ int uv__io_check_fd(uv_loop_t* loop, int fd) {
   return 0;
 }
 
-int async_message(uv_loop_t* loop) {
+static int async_message(uv_loop_t* loop) {
 
 	int 		nevents = 0;
 
@@ -1129,3 +1125,27 @@ update_timeout:
 		timeout = real_timeout;
 	}
 }
+
+static int maybe_new_socket(uv_tcp_t* handle, int domain, int flags) {
+  int sockfd;
+  int err;
+
+  if (domain == AF_UNSPEC || uv__stream_fd(handle) != -1) {
+    handle->flags |= flags;
+    return 0;
+  }
+
+  err = uv__socket(domain, SOCK_STREAM, 0);
+  if (err < 0)
+    return err;
+  sockfd = err;
+
+  err = uv__stream_open((uv_stream_t*) handle, sockfd, flags);
+  if (err) {
+    uv__close(sockfd);
+    return err;
+  }
+
+  return 0;
+}
+

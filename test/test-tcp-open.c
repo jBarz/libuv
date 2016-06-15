@@ -113,7 +113,6 @@ static void read_cb(uv_stream_t* tcp, ssize_t nread, const uv_buf_t* buf) {
   if (nread >= 0) {
     ASSERT(nread == 4);
     ASSERT(memcmp("PING", buf->base, nread) == 0);
-    printf("GOT PING\n");
   }
   else {
     ASSERT(nread == UV_EOF);

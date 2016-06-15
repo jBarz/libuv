@@ -324,14 +324,12 @@ int uv_sem_init(uv_sem_t* sem, unsigned int value) {
   return 0;
 }
 
-
 void uv_sem_destroy(uv_sem_t* sem) {
   int a = semctl( *sem, 0, IPC_RMID);
 
   if (a == -1)
     abort();
 }
-
 
 void uv_sem_post(uv_sem_t* sem) {
   struct sembuf s = { 0, 1, 0 };
@@ -340,13 +338,11 @@ void uv_sem_post(uv_sem_t* sem) {
     abort();
 }
 
-
 void uv_sem_wait(uv_sem_t* sem) {
   int r;
   struct sembuf s = { 0, -1, 0 };
 
   do
-    //r = sem_wait(sem);
     r = semop(*sem, &s, 1);
   while (r == -1 && errno == EINTR);
 
@@ -354,13 +350,11 @@ void uv_sem_wait(uv_sem_t* sem) {
     abort();
 }
 
-
 int uv_sem_trywait(uv_sem_t* sem) {
   int r;
   struct sembuf s = { 0, -1, IPC_NOWAIT };
 
   do
-    //r = sem_trywait(sem);
     r = semop(*sem, &s, 1);
   while (r == -1 && errno == EINTR);
 

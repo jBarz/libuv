@@ -38,7 +38,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #if defined (__MVS__)
-#define _OPEN_SYS_FILE_EXT 1
 #include <stdlib.h>
 #endif
 #include <sys/stat.h>
@@ -241,9 +240,7 @@ static ssize_t uv__fs_mkdtemp(uv_fs_t* req) {
   req->path = c;
   return 0;
 #else
-  char* c = tempnam("/tmp", (char*)req->path);
-  mkdir(c, S_IRWXU);
-  return c;
+  return mkdtemp((char*) req->path) ? 0 : -1;
 #endif
 }
 
@@ -367,8 +364,8 @@ static int uv__fs_scandir_filter(const uv__dirent_t* dent) {
   return strcmp(dent->d_name, ".") != 0 && strcmp(dent->d_name, "..") != 0;
 }
 
-#ifdef __MVS__
-int alphasort(const void *a, const void *b) {
+#if defined(__MVS__)
+static int alphasort(const void *a, const void *b) {
 
     return strcoll(
             (*(const struct dirent **)a)->d_name, 
@@ -379,7 +376,7 @@ int alphasort(const void *a, const void *b) {
 /*
 **  * scandir.c: scandir
 **   */
-int scandir(const char *dirp, struct dirent ***namelist,
+static int scandir(const char *dirp, struct dirent ***namelist,
         int (*filter)(const struct dirent *),
         int (*compar)(const struct dirent **, const struct dirent **))
 {
@@ -866,7 +863,7 @@ static void uv__to_stat(struct stat* src, uv_stat_t* dst) {
   dst->st_birthtim.tv_nsec = src->st_ctimensec;
   dst->st_flags = 0;
   dst->st_gen = 0;
-#elif !defined(_AIX) && !defined(__ibmxl__) && (       \
+#elif !defined(_AIX) && (       \
     defined(_BSD_SOURCE)     || \
     defined(_SVID_SOURCE)    || \
     defined(_XOPEN_SOURCE)   || \
@@ -1098,7 +1095,7 @@ int uv_fs_chown(uv_loop_t* loop,
                 uv_fs_cb cb) {
   INIT(CHOWN);
   PATH;
-#ifdef __MVS__
+#if defined(__MVS__)
   struct stat info;
   if (uid == -1 || gid == -1)
     stat(path, &info);
@@ -1139,7 +1136,7 @@ int uv_fs_fchown(uv_loop_t* loop,
                  uv_fs_cb cb) {
   INIT(FCHOWN);
   req->file = file;
-#ifdef __MVS__
+#if defined(__MVS__)
   struct stat info;
   if (uid == -1 || gid == -1)
     fstat(file, &info);

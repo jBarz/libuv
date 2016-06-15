@@ -645,7 +645,6 @@ int uv_udp_set_membership(uv_udp_t* handle,
   } else {
     return -EINVAL;
   }
-
 }
 
 static int uv__setsockopt(uv_udp_t* handle,
@@ -656,20 +655,17 @@ static int uv__setsockopt(uv_udp_t* handle,
   int r;
 
   if (handle->flags & UV_HANDLE_IPV6)
-{
     r = setsockopt(handle->io_watcher.fd,
                    IPPROTO_IPV6,
                    option6,
                    val,
                    size);
-}
   else
     r = setsockopt(handle->io_watcher.fd,
                    IPPROTO_IP,
                    option4,
                    val,
                    size);
-
   if (r)
     return -errno;
 
@@ -729,13 +725,12 @@ int uv_udp_set_ttl(uv_udp_t* handle, int ttl) {
                         IPV6_UNICAST_HOPS,
                         &ttl,
                         sizeof(ttl));
-#else
+#endif /* defined(__sun) || defined(_AIX) || defined (__OpenBSD__) || defined(__MVS__) */
 
   return uv__setsockopt_maybe_char(handle,
                                    IP_TTL,
                                    IPV6_UNICAST_HOPS,
                                    ttl);
-#endif
 }
 
 
@@ -753,7 +748,7 @@ int uv_udp_set_multicast_ttl(uv_udp_t* handle, int ttl) {
                           IPV6_MULTICAST_HOPS,
                           &ttl,
                           sizeof(ttl));
-#endif /* defined(__sun) || defined(_AIX) */
+#endif /* defined(__sun) || defined(_AIX) || defined(__MVS__) */
 
   return uv__setsockopt_maybe_char(handle,
                                    IP_MULTICAST_TTL,
@@ -776,7 +771,7 @@ int uv_udp_set_multicast_loop(uv_udp_t* handle, int on) {
                           IPV6_MULTICAST_LOOP,
                           &on,
                           sizeof(on));
-#endif /* defined(__sun) || defined(_AIX) */
+#endif /* defined(__sun) || defined(_AIX) || defined(__MVS__) */
 
   return uv__setsockopt_maybe_char(handle,
                                    IP_MULTICAST_LOOP,

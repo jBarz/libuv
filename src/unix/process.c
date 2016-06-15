@@ -99,14 +99,12 @@ static void uv__chld(uv_signal_t* handle, int signum) {
       continue;
 
     exit_status = 0;
-    if (WIFEXITED(process->status)){
+    if (WIFEXITED(process->status))
       exit_status = WEXITSTATUS(process->status);
-    }
 
     term_signal = 0;
-    if (WIFSIGNALED(process->status)){
+    if (WIFSIGNALED(process->status))
       term_signal = WTERMSIG(process->status);
-    }
 
     process->exit_cb(process, exit_status, term_signal);
   }
@@ -324,12 +322,10 @@ static void uv__process_child_init(const uv_process_options_t* options,
       }
     }
 
-    if (fd == use_fd){
+    if (fd == use_fd)
       uv__cloexec(use_fd, 0);
-    }
-    else{
+    else
       fd = dup2(use_fd, fd);
-    }
 
     if (fd == -1) {
       uv__write_int(error_fd, -errno);
@@ -476,7 +472,6 @@ int uv_spawn(uv_loop_t* loop,
     uv__process_child_init(options, stdio_count, pipes, signal_pipe[1]);
     abort();
   }
-
 
   /* Release lock in parent process */
   uv_rwlock_wrunlock(&loop->cloexec_lock);

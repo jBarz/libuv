@@ -49,7 +49,6 @@ static void close_cb(uv_handle_t* handle) {
 static void write_cb(uv_write_t* req, int status) {
   ASSERT(status == 0);
   write_cb_called++;
-
 }
 
 static void connect_cb(uv_connect_t* req, int status) {
@@ -58,12 +57,7 @@ static void connect_cb(uv_connect_t* req, int status) {
   uv_stream_t* outgoing;
 
   if (req == &tcp_check_req) {
-#if defined(__MVS__)
-    /* zOS cleans up stale event */
-    ASSERT(status == 0);
-#else
     ASSERT(status != 0);
-#endif
 
     /*
      * Time to finish the test: close both the check and pending incoming
@@ -108,6 +102,9 @@ static void read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
       uv_close((uv_handle_t*) &tcp_incoming[i], close_cb);
   }
 
+  /* Close server, so no one will connect to it */
+  uv_close((uv_handle_t*) &tcp_server, close_cb);
+
   /* Create new fd that should be one of the closed incomings */
   ASSERT(0 == uv_tcp_init(loop, &tcp_check));
   ASSERT(0 == uv_tcp_connect(&tcp_check_req,
@@ -115,9 +112,6 @@ static void read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
                              (const struct sockaddr*) &addr,
                              connect_cb));
   ASSERT(0 == uv_read_start((uv_stream_t*) &tcp_check, alloc_cb, read_cb));
-
-  /* Close server, so no one will connect to it */
-  uv_close((uv_handle_t*) &tcp_server, close_cb);
 
 }
 

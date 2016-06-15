@@ -66,11 +66,7 @@ static void pinger_on_close(uv_handle_t* handle) {
 
 
 static void pinger_after_write(uv_write_t *req, int status) {
-
-  pinger_t* pinger;
-  pinger = (pinger_t*)req->handle->data;
   ASSERT(status == 0);
-
   free(req);
 }
 

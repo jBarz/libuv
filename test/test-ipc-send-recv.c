@@ -68,8 +68,8 @@ static struct echo_ctx ctx2;
 /* Used in write2_cb to decide if we need to cleanup or not */
 static int is_child_process;
 static int is_in_process;
-static int read_cb_called;
-static int recv_cb_called;
+static int read_cb_count;
+static int recv_cb_count;
 static int write2_cb_called;
 
 
@@ -77,11 +77,7 @@ static void alloc_cb(uv_handle_t* handle,
                      size_t suggested_size,
                      uv_buf_t* buf) {
   /* we're not actually reading anything so a small buffer is okay */
-#if defined(__MVS__)
-  static char slab[1];
-#else
   static char slab[8];
-#endif
   buf->base = slab;
   buf->len = sizeof(slab);
 }
@@ -95,43 +91,45 @@ static void recv_cb(uv_stream_t* handle,
   int r;
   union handles* recv;
 
-  if (++recv_cb_called == 1) {
-    recv = &ctx.recv;
-  } else {
-    recv = &ctx.recv2;
-  }
-
   pipe = (uv_pipe_t*) handle;
   ASSERT(pipe == &ctx.channel);
 
-  /* Depending on the OS, the final recv_cb can be called after the child
-   * process has terminated which can result in nread being UV_EOF instead of
-   * the number of bytes read.  Since the other end of the pipe has closed this
-   * UV_EOF is an acceptable value. */
-  if (nread == UV_EOF) {
-    /* UV_EOF is only acceptable for the final recv_cb call */
-    ASSERT(recv_cb_called == 2);
-  } else {
-    ASSERT(nread >= 0);
-    ASSERT(1 == uv_pipe_pending_count(pipe));
+  while(uv_pipe_pending_count(pipe)) {
+    if (++recv_cb_count== 1) {
+      recv = &ctx.recv;
+    } else {
+      recv = &ctx.recv2;
+    }
 
-    pending = uv_pipe_pending_type(pipe);
-    ASSERT(pending == ctx.expected_type);
+    /* Depending on the OS, the final recv_cb can be called after the child
+     * process has terminated which can result in nread being UV_EOF instead of
+     * the number of bytes read.  Since the other end of the pipe has closed this
+     * UV_EOF is an acceptable value. */
+    if (nread == UV_EOF) {
+      /* UV_EOF is only acceptable for the final recv_cb call */
+      ASSERT(recv_cb_count == 2);
+    } else {
+      ASSERT(nread >= 0);
+      //ASSERT(1 == uv_pipe_pending_count(pipe));
 
-    if (pending == UV_NAMED_PIPE)
-      r = uv_pipe_init(ctx.channel.loop, &recv->pipe, 0);
-    else if (pending == UV_TCP)
-      r = uv_tcp_init(ctx.channel.loop, &recv->tcp);
-    else
-      abort();
-    ASSERT(r == 0);
+      pending = uv_pipe_pending_type(pipe);
+      ASSERT(pending == ctx.expected_type);
 
-    r = uv_accept(handle, &recv->stream);
-    ASSERT(r == 0);
+      if (pending == UV_NAMED_PIPE)
+        r = uv_pipe_init(ctx.channel.loop, &recv->pipe, 0);
+      else if (pending == UV_TCP)
+        r = uv_tcp_init(ctx.channel.loop, &recv->tcp);
+      else
+        abort();
+      ASSERT(r == 0);
+
+      r = uv_accept(handle, &recv->stream);
+      ASSERT(r == 0);
+    }
   }
 
   /* Close after two writes received */
-  if (recv_cb_called == 2) {
+  if (recv_cb_count == 2) {
     uv_close((uv_handle_t*)&ctx.channel, NULL);
   }
 }
@@ -190,7 +188,7 @@ static int run_test(int inprocess) {
   r = uv_run(uv_default_loop(), UV_RUN_DEFAULT);
   ASSERT(r == 0);
 
-  ASSERT(recv_cb_called == 2);
+  ASSERT(recv_cb_count == 2);
 
   if (inprocess) {
     r = uv_thread_join(&tid);
@@ -297,41 +295,44 @@ static void read_cb(uv_stream_t* handle,
     return;
   }
 
-  if (++read_cb_called == 2) {
-    recv = &ctx2.recv;
-    write_req = &ctx2.write_req;
-  } else {
-    recv = &ctx2.recv2;
-    write_req = &ctx2.write_req2;
-  }
-
+  //for (int i = 0; i < uv_pipe_pending_count(pipe); ++i) {
   pipe = (uv_pipe_t*) handle;
-  ASSERT(pipe == &ctx2.channel);
-  ASSERT(nread >= 0);
-  ASSERT(1 == uv_pipe_pending_count(pipe));
+  while(uv_pipe_pending_count(pipe)) {
+    if (++read_cb_count == 2) {
+      recv = &ctx2.recv;
+      write_req = &ctx2.write_req;
+    } else {
+      recv = &ctx2.recv2;
+      write_req = &ctx2.write_req2;
+    }
 
-  pending = uv_pipe_pending_type(pipe);
-  ASSERT(pending == UV_NAMED_PIPE || pending == UV_TCP);
+    ASSERT(pipe == &ctx2.channel);
+    ASSERT(nread >= 0);
+    //ASSERT(nread == uv_pipe_pending_count(pipe));
 
-  if (pending == UV_NAMED_PIPE)
-    r = uv_pipe_init(ctx2.channel.loop, &recv->pipe, 0);
-  else if (pending == UV_TCP)
-    r = uv_tcp_init(ctx2.channel.loop, &recv->tcp);
-  else
-    abort();
-  ASSERT(r == 0);
+    pending = uv_pipe_pending_type(pipe);
+    ASSERT(pending == UV_NAMED_PIPE || pending == UV_TCP);
 
-  r = uv_accept(handle, &recv->stream);
-  ASSERT(r == 0);
+    if (pending == UV_NAMED_PIPE)
+      r = uv_pipe_init(ctx2.channel.loop, &recv->pipe, 0);
+    else if (pending == UV_TCP)
+      r = uv_tcp_init(ctx2.channel.loop, &recv->tcp);
+    else
+      abort();
+    ASSERT(r == 0);
 
-  wrbuf = uv_buf_init(".", 1);
-  r = uv_write2(write_req,
-                (uv_stream_t*)&ctx2.channel,
-                &wrbuf,
-                1,
-                &recv->stream,
-                write2_cb);
-  ASSERT(r == 0);
+    r = uv_accept(handle, &recv->stream);
+    ASSERT(r == 0);
+
+    wrbuf = uv_buf_init(".", 1);
+    r = uv_write2(write_req,
+                  (uv_stream_t*)&ctx2.channel,
+                  &wrbuf,
+                  1,
+                  &recv->stream,
+                  write2_cb);
+    ASSERT(r == 0);
+  }
 }
 
 static void send_recv_start() {

@@ -116,8 +116,8 @@ int uv__tcp_bind(uv_tcp_t* tcp,
                    IPV6_V6ONLY,
                    &on,
                    sizeof on) == -1) {
-#ifdef __MVS__
-// bug in zOS returning setting the wrong error code
+#if defined(__MVS__)
+      // bug in zOS returning setting the wrong error code
       return UV_EINVAL;
 #endif
       return -errno;
@@ -138,7 +138,7 @@ int uv__tcp_bind(uv_tcp_t* tcp,
   if (addr->sa_family == AF_INET6)
     tcp->flags |= UV_HANDLE_IPV6;
 
-#ifdef __MVS__
+#if defined(__MVS__)
   tcp->is_bound = 1;
 #endif
 

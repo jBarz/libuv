@@ -69,7 +69,7 @@ int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
   memset(&saddr, 0, sizeof saddr);
   strncpy(saddr.sun_path, pipe_fname, sizeof(saddr.sun_path) - 1);
   saddr.sun_path[sizeof(saddr.sun_path) - 1] = '\0';
-#ifdef __MVS__
+#if defined(__MVS__)
   saddr.sun_len = strlen(saddr.sun_path);
 #endif
   saddr.sun_family = AF_UNIX;
@@ -175,7 +175,7 @@ void uv_pipe_connect(uv_connect_t* req,
   memset(&saddr, 0, sizeof saddr);
   strncpy(saddr.sun_path, name, sizeof(saddr.sun_path) - 1);
   saddr.sun_path[sizeof(saddr.sun_path) - 1] = '\0';
-#ifdef __MVS__
+#if defined(__MVS__)
   saddr.sun_len = strlen(saddr.sun_path);
 #endif
   saddr.sun_family = AF_UNIX;
@@ -211,9 +211,8 @@ out:
   QUEUE_INIT(&req->queue);
 
   /* Force callback to run on next tick in case of error. */
-  if (err){
+  if (err)
     uv__io_feed(handle->loop, &handle->io_watcher);
-  }
 
 }
 

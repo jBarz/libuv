@@ -74,7 +74,7 @@
 # include <dlfcn.h>  /* for dlsym */
 #endif
 
-#ifdef __MVS__
+#if defined(__MVS__)
 #include <sys/ioctl.h>
 #endif
 
@@ -343,7 +343,6 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
 
   while (r != 0 && loop->stop_flag == 0) {
     uv__update_time(loop);
-
     uv__run_timers(loop);
     ran_pending = uv__run_pending(loop);
     uv__run_idle(loop);
@@ -352,8 +351,6 @@ int uv_run(uv_loop_t* loop, uv_run_mode mode) {
     timeout = 0;
     if ((mode == UV_RUN_ONCE && !ran_pending) || mode == UV_RUN_DEFAULT)
       timeout = uv_backend_timeout(loop);
-
-    //uv_print_all_handles(loop, stdout);
 
     uv__io_poll(loop, timeout);
     uv__run_check(loop);
@@ -397,6 +394,7 @@ int uv_is_active(const uv_handle_t* handle) {
 }
 
 
+/* Open a socket in non-blocking close-on-exec mode, atomically if possible. */
 int uv__socket(int domain, int type, int protocol) {
   int sockfd;
   int err;
@@ -508,7 +506,6 @@ int uv__close_nocheckstdio(int fd) {
   assert(fd > -1);  /* Catch uninitialized io_watcher.fd bugs. */
 
   saved_errno = errno;
-  
   rc = close(fd);
   if (rc == -1) {
     rc = -errno;
@@ -583,6 +580,7 @@ int uv__nonblock(int fd, int set) {
 
   return 0;
 }
+
 
 int uv__cloexec_fcntl(int fd, int set) {
   int flags;
@@ -849,9 +847,8 @@ void uv__io_start(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   }
 #endif
 
-  if (QUEUE_EMPTY(&w->watcher_queue)){
+  if (QUEUE_EMPTY(&w->watcher_queue))
     QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
-  }
 
   if (loop->watchers[w->fd] == NULL) {
     loop->watchers[w->fd] = w;

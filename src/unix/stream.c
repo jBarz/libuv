@@ -1435,6 +1435,8 @@ static void uv__read(uv_stream_t* stream) {
       /* Successful read */
       ssize_t buflen = buf.len;
 
+#if defined(__MVS__)
+
       if (is_ipc) {
         err = uv__stream_recv_cmsg(stream, &msg);
         if (err != 0) {
@@ -1442,7 +1444,34 @@ static void uv__read(uv_stream_t* stream) {
           return;
         }
       }
+
+      if (is_ipc && msg.msg_controllen > 0) {
+        uv_buf_t blankbuf = {0, 0};
+	struct iovec *old = msg.msg_iov;
+        msg.msg_iov = (struct iovec*) &blankbuf;
+	int nread = 0;
+	do {
+          nread = uv__recvmsg(uv__stream_fd(stream), &msg, 0);
+          err = uv__stream_recv_cmsg(stream, &msg);
+          if (err != 0) {
+            stream->read_cb(stream, err, &buf);
+            msg.msg_iov = old;
+            return;
+          }
+	} while ( nread == 0 && msg.msg_controllen > 0 );
+        msg.msg_iov = old;
+      }
+#else
+      if (is_ipc) {
+        err = uv__stream_recv_cmsg(stream, &msg);
+        if (err != 0) {
+          stream->read_cb(stream, err, &buf);
+          return;
+        }
+      }
+#endif
       stream->read_cb(stream, nread, &buf);
+
 
 #if defined(__MVS__)
       /* Continue to read */
@@ -1479,19 +1508,8 @@ static void uv__read(uv_stream_t* stream) {
       }
 #endif
 
-#if defined(__MVS__)
-      if (nread < buflen || (nread == buflen && msg.msg_controllen > 0)) {
-      /* This is what we want to avoid
-	  * recvmsg
-          * nread == buflen && msg.msg_controllen > 0
-          * poll returns read available on socket
-	  * rcvmsg on socket
-	  * nread == 0 && msg.msg_controllen > 0   <-- zOS closes the socket for some reason
-      */
-#else
       /* Return if we didn't fill the buffer, there is no more data to read. */
-      if (nread < buflen) {
-#endif
+      if (nread < buflen ) {
         stream->flags |= UV_STREAM_READ_PARTIAL;
         return;
       }
@@ -1627,7 +1645,7 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
  * getsockopt.
  */
 static void uv__stream_connect(uv_stream_t* stream) {
-  int error;
+  int error = 0;
   uv_connect_t* req = stream->connect_req;
   socklen_t errorsize = sizeof(int);
 
@@ -1651,7 +1669,8 @@ static void uv__stream_connect(uv_stream_t* stream) {
       else
         error = -error;
     }
-    else {
+
+    if (!error) {
     /* Normal situation: we need to get the socket error from the kernel. */
       assert(uv__stream_fd(stream) >= 0);
       assert(0 == getsockopt(uv__stream_fd(stream),

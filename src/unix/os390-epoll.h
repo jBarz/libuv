@@ -13,10 +13,7 @@
 #define MAX_ITEMS_PER_EPOLL 	1024
 
 typedef union epoll_data {
-    //void        *ptr;
     int          fd;
-    //uint32_t     u32;
-    //uint64_t     u64;
 } epoll_data_t;
 
 struct epoll_event {

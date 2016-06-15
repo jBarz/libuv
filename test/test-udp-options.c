@@ -53,8 +53,10 @@ static int udp_options_test(const struct sockaddr* addr) {
   for (i = 1; i <= 255; i++) {
     r = uv_udp_set_ttl(&h, i);
 #if defined(__MVS__)
-    /* zOS cannot set ttl for INET sockets */
-    ASSERT(addr->sa_family == AF_INET ? r == -EINVAL : r == 0);
+    if(addr->sa_family == AF_INET6)
+      ASSERT(r == 0);
+    else
+      ASSERT(r == UV_EINVAL);
 #else
     ASSERT(r == 0);
 #endif
@@ -118,7 +120,9 @@ TEST_IMPL(udp_no_autobind) {
   ASSERT(0 == uv_udp_init(loop, &h));
   ASSERT(UV_EBADF == uv_udp_set_multicast_ttl(&h, 32));
   ASSERT(UV_EBADF == uv_udp_set_broadcast(&h, 1));
-#ifndef __MVS__
+#if defined(__MVS__)
+  ASSERT(UV_EINVAL == uv_udp_set_ttl(&h, 1));
+#else
   ASSERT(UV_EBADF == uv_udp_set_ttl(&h, 1));
 #endif
   ASSERT(UV_EBADF == uv_udp_set_multicast_loop(&h, 1));

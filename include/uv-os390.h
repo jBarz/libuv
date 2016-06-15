@@ -40,14 +40,10 @@
 #define ZASYNC BPX1AIO
 #endif
 
-struct AioMsg{         /* The I/O Complete Message                */
-        long int mm_type;   /* Msg type: used for type of I/O    */
-        void *mm_ptr; /* Msg text: identifies the client   */
+struct AioMsg{         		/* The I/O Complete Message          */
+        long int mm_type;   	/* Msg type: used for type of I/O    */
+        void *mm_ptr; 		/* Msg text: identifies the handle   */
 };
-
-#define UV_PLATFORM_FS_EVENT_FIELDS                                           \
-  void* watchers[2];                                                          \
-  int wd;                                                                     \
 
 #define UV_PLATFORM_LOOP_FIELDS                                               \
     int msgqid;							      \

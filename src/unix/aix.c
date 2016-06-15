@@ -47,11 +47,7 @@
 #include <sys/proc.h>
 #include <sys/procfs.h>
 
-#ifdef __MVS__
-#include <poll.h>
-#else
 #include <sys/poll.h>
-#endif
 
 #include <sys/pollset.h>
 #include <ctype.h>
@@ -1042,7 +1038,6 @@ int uv_interface_addresses(uv_interface_address_t** addresses,
     uv__close(sockfd);
     return -errno;
   }
-
 
 #define ADDR_SIZE(p) MAX((p).sa_len, sizeof(p))
 

@@ -35,7 +35,6 @@
 #ifdef __MVS__
 #include <sys/ipc.h>
 #include <sys/sem.h>
-#include "pthread-fixes.h"
 #endif
 
 #undef NANOSEC

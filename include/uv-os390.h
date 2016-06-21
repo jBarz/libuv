@@ -26,9 +26,9 @@
 #include <aio.h>
 #include <sys/msg.h>
 
-#define AIO_MSG_READ 1
-#define AIO_MSG_WRITE 2
-#define AIO_MSG_ACCEPT 3
+#define AIO_MSG_READ 	  1
+#define AIO_MSG_WRITE 	2
+#define AIO_MSG_ACCEPT 	3
 #define AIO_MSG_CONNECT 4
 
 #define UV__ZAIO_READING 1
@@ -40,35 +40,35 @@
 #define ZASYNC BPX1AIO
 #endif
 
-struct AioMsg{         		/* The I/O Complete Message          */
-        long int mm_type;   	/* Msg type: used for type of I/O    */
-        void *mm_ptr; 		/* Msg text: identifies the handle   */
+struct AioMsg {         /* The I/O Complete Message          */
+  long int mm_type;   	/* Msg type: used for type of I/O    */
+  void *mm_ptr; 		    /* Msg text: identifies the handle   */
 };
 
-#define UV_PLATFORM_LOOP_FIELDS                                               \
-    int msgqid;							      \
+#define UV_PLATFORM_LOOP_FIELDS     				\
+  int msgqid;
 
-#define UV_TCP_PRIVATE_PLATFORM_FIELDS                                        \
-    int is_bound;							      \
+#define UV_TCP_PRIVATE_PLATFORM_FIELDS			\
+  int is_bound;
 
-#define UV_PLATFORM_WRITE_FIELDS                                              \
-    struct aiocb aio_write;                                                   \
-    struct AioMsg aio_write_msg;                                               \
+#define UV_PLATFORM_WRITE_FIELDS	      		\
+  struct aiocb aio_write;		            		\
+  struct AioMsg aio_write_msg;
 
-#define UV_STREAM_PRIVATE_PLATFORM_FIELDS				      \
-    struct aiocb aio_read;                                                    \
-    struct aiocb aio_cancel;                                                    \
-    struct AioMsg aio_read_msg;                                               \
-    struct AioMsg aio_cancel_msg;                                            \
-    int aio_status;                                                          \
-    char bufsml[4];                                                          \
+#define UV_STREAM_PRIVATE_PLATFORM_FIELDS		\
+  struct aiocb aio_read;	            			\
+  struct aiocb aio_cancel;		           		\
+  struct AioMsg aio_read_msg;				        \
+  struct AioMsg aio_cancel_msg;			        \
+  int aio_status;					                  \
+  char bufsml[4];
 
-#define UV_PLATFORM_CONNECT_FIELDS				              \
-    struct aiocb aio_connect;                                                 \
-    struct AioMsg aio_connect_msg;                                            \
+#define UV_PLATFORM_CONNECT_FIELDS		    	\
+  struct aiocb aio_connect;				          \
+  struct AioMsg aio_connect_msg;
 
-#define UV_IO_PRIVATE_PLATFORM_FIELDS					      \
-    struct aiocb *aio_read, *aio_write;
-   
+#define UV_IO_PRIVATE_PLATFORM_FIELDS       \
+  struct aiocb *aio_read, *aio_write;
+
 
 #endif /* UV_MVS_H */

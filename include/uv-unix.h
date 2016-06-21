@@ -146,8 +146,7 @@ typedef pthread_key_t uv_key_t;
 
 #if defined(__MVS__)
 
-typedef struct 
-{
+typedef struct {
   unsigned count;
   unsigned total;
   pthread_mutex_t mutex;

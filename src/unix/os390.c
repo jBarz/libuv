@@ -53,6 +53,8 @@
 #include <limits.h>
 #include <strings.h>
 
+#include "//'SYS1.SAMPLIB(CSRSIC)'"
+
 #define RDWR_BUF_SIZE   4096
 #define EQ(a,b)         (strcmp(a,b) == 0)
 

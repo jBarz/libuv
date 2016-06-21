@@ -29,4 +29,9 @@
   uv__io_t event_watcher;                                                     \
   char *dir_filename;                                                         \
 
+#define UV_PLATFORM_CONNECT_FIELDS
+#define UV_PLATFORM_WRITE_FIELDS
+#define UV_STREAM_PRIVATE_PLATFORM_FIELDS
+
+
 #endif /* UV_AIX_H */

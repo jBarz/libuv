@@ -112,11 +112,6 @@ void uv_close(uv_handle_t* handle, uv_close_cb close_cb) {
 
   case UV_TCP:
     uv__tcp_close((uv_tcp_t*)handle);
-#if defined(__MVS__)
-    /* Need to wait for all AIO_WRITE signals to finish processing */
-    /* the stream will itself call uv__make_close_pending when appropriate */
-    return;
-#endif
     break;
 
   case UV_UDP:

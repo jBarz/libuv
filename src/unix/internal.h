@@ -264,6 +264,11 @@ int uv___stream_fd(const uv_stream_t* handle);
 #define uv__stream_fd(handle) ((handle)->io_watcher.fd)
 #endif /* defined(__APPLE__) */
 
+#if defined(__MVS__)
+int uv__asyncio_zos_write(uv_stream_t *str);
+int uv__asyncio_zos_cancel(uv_stream_t *str);
+#endif
+
 #ifdef UV__O_NONBLOCK
 # define UV__F_NONBLOCK UV__O_NONBLOCK
 #else

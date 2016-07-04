@@ -26,6 +26,9 @@
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
+#if defined(__MVS__)
+#include <xti.h>
+#endif
 
 
 static int maybe_new_socket(uv_tcp_t* handle, int domain, int flags) {
@@ -174,7 +177,6 @@ int uv__tcp_connect(uv_connect_t* req,
     req->aio_connect.aio_fildes = uv__stream_fd(handle);
     req->aio_connect.aio_notifytype = AIO_MSGQ;
     req->aio_connect.aio_cmd = AIO_CONNECT;
-    req->aio_connect.aio_cflags |= AIO_OK2COMPIMD;
     req->aio_connect.aio_msgev_qid = handle->loop->msgqid;
     req->aio_connect_msg.mm_type = AIO_MSG_CONNECT;
     req->aio_connect_msg.mm_ptr = req;
@@ -194,7 +196,7 @@ int uv__tcp_connect(uv_connect_t* req,
 	   wait for notification */
         r = -1;
         errno = EINPROGRESS;
-        handle->aio_status |= UV__ZAIO_WRITING;
+        uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);
       }
       else if(rv == 1) {
 	/* do nothing. Just as if connect() succeeded */
@@ -220,19 +222,14 @@ int uv__tcp_connect(uv_connect_t* req,
       return -errno;
   }
 
+
   uv__req_init(handle->loop, req, UV_CONNECT);
   req->cb = cb;
   req->handle = (uv_stream_t*) handle;
   QUEUE_INIT(&req->queue);
   handle->connect_req = req;
 
-#if defined(__MVS__)
-  if (r == 1)
-    /* the aio connect succeeded immediately. Ready for io */
-    uv__io_feed(handle->loop, &handle->io_watcher);
-#else
   uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);
-#endif
 
   if (handle->delayed_error)
     uv__io_feed(handle->loop, &handle->io_watcher);
@@ -253,9 +250,6 @@ int uv_tcp_open(uv_tcp_t* handle, uv_os_sock_t sock) {
   return uv__stream_open((uv_stream_t*)handle, sock, 
 				  UV_STREAM_READABLE 
 				| UV_STREAM_WRITABLE
-#if 0
-				| UV_STREAM_BLOCKING
-#endif
 				);
 }
 
@@ -371,7 +365,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   if (rv == -1)
     return -rc;
   else
-    tcp->aio_status |= UV__ZAIO_READING;
+    uv__io_start(tcp->loop, &tcp->io_watcher, POLLIN);
 #else
   uv__io_start(tcp->loop, &tcp->io_watcher, POLLIN);
 #endif
@@ -381,10 +375,8 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
 
 
 int uv__tcp_nodelay(int fd, int on) {
-#if !defined(__MVS__)
   if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on)))
     return -errno;
-#endif
   return 0;
 }
 

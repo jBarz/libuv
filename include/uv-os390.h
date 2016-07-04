@@ -31,9 +31,6 @@
 #define AIO_MSG_ACCEPT 	3
 #define AIO_MSG_CONNECT 4
 
-#define UV__ZAIO_READING 1
-#define UV__ZAIO_WRITING 2
-
 #if defined(__64BIT__)
 #define ZASYNC BPX4AIO
 #else
@@ -60,15 +57,12 @@ struct AioMsg {         /* The I/O Complete Message          */
   struct aiocb aio_cancel;		           		\
   struct AioMsg aio_read_msg;				        \
   struct AioMsg aio_cancel_msg;			        \
-  int aio_status;					                  \
-  char bufsml[4];
+  char bufsml[64];
 
 #define UV_PLATFORM_CONNECT_FIELDS		    	\
   struct aiocb aio_connect;				          \
   struct AioMsg aio_connect_msg;
 
 #define UV_IO_PRIVATE_PLATFORM_FIELDS       \
-  struct aiocb *aio_read, *aio_write;
-
 
 #endif /* UV_MVS_H */

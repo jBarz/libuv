@@ -46,6 +46,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <strings.h>
+#include <xti.h>
 
 #include "//'SYS1.SAMPLIB(CSRSIC)'"
 
@@ -811,7 +812,39 @@ static int async_message(uv_loop_t* loop) {
   /* now process them */
   for(int i = 0; i < nevents; ++i)
   {
-    if(msgin[i].mm_type == AIO_MSG_READ || msgin[i].mm_type == AIO_MSG_ACCEPT)
+    if(msgin[i].mm_type == AIO_MSG_READ)
+    {
+      int flags = 0;
+      uv__io_t *watcher;
+      uv_tcp_t* stream;
+
+      watcher = (uv__io_t*)msgin[i].mm_ptr;
+      stream = container_of(watcher, uv_stream_t, io_watcher);
+
+
+      if (stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
+        flags = POLLHUP;	// we have already read eof. So hangup */ 
+      else
+        flags = POLLIN;
+
+      if(!(stream->flags & UV_CLOSING))
+        watcher->cb(loop, watcher, flags);
+
+      memset(&stream->aio_read, 0, sizeof(struct aiocb));
+#if 0
+      if(QUEUE_EMPTY(&stream->write_queue) && stream->shutdown_req)
+        uv__io_feed(loop, watcher);
+#endif
+
+      if((stream->flags & UV_STREAM_READ_PARTIAL) && !(stream->flags & UV_CLOSING)) {
+        uv__io_stop(loop, watcher, POLLIN);
+        uv__io_start(loop, watcher, POLLIN);
+
+      }
+
+      continue;
+    }
+    else if(msgin[i].mm_type == AIO_MSG_ACCEPT)
     {
       int flags=0;
       uv__io_t *watcher;
@@ -820,18 +853,13 @@ static int async_message(uv_loop_t* loop) {
       watcher = (uv__io_t*)msgin[i].mm_ptr;
       stream = container_of(watcher, uv_stream_t, io_watcher);
 
-      assert(stream->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
-      stream->aio_status &= ~UV__ZAIO_READING;
-
-      if (stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
+      if(stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
         flags = POLLHUP;	// we have already read eof. So hangup */ 
-      else if ((stream->flags & UV_CLOSING) && !(stream->aio_status & (UV__ZAIO_WRITING | UV__ZAIO_READING)))
-        flags = POLLHUP;
       else
         flags = POLLIN;
 
-      int fd = watcher->fd;
-      watcher->cb(loop, watcher, flags);
+      if(!(stream->flags & UV_CLOSING))
+        watcher->cb(loop, watcher, flags);
       continue;
     }
     else if(msgin[i].mm_type == AIO_MSG_WRITE)
@@ -841,15 +869,18 @@ static int async_message(uv_loop_t* loop) {
       uv__io_t *watcher = &req->handle->io_watcher;
       int fd = req->aio_write.aio_fildes;
 
-      assert(req->handle->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
-      req->handle->aio_status &= ~UV__ZAIO_WRITING;
 
-      if ((req->handle->flags & UV_CLOSING) && !(req->handle->aio_status & UV__ZAIO_READING))
+      if (req->handle->flags & UV_CLOSING)
+        continue;
+      
+      if ((req->handle->flags & UV_CLOSING) && !(uv__io_active(&req->handle->io_watcher, POLLIN)))
         flags = POLLHUP;
       else
         flags = POLLOUT;
 
+
       watcher->cb(loop, watcher, flags);
+      memset(&req->aio_write, 0, sizeof(struct aiocb));
       continue;
     }
     else if(msgin[i].mm_type == AIO_MSG_CONNECT)
@@ -859,13 +890,13 @@ static int async_message(uv_loop_t* loop) {
       uv__io_t *watcher = &req->handle->io_watcher;
       int fd = req->aio_connect.aio_fildes;
 
-      assert(req->handle->aio_status & (UV__ZAIO_READING | UV__ZAIO_WRITING));
-      req->handle->aio_status &= ~UV__ZAIO_WRITING;
-
-      if ((req->handle->flags & UV_CLOSING) && !(req->handle->aio_status & UV__ZAIO_READING))
+      if ((req->handle->flags & UV_CLOSING) && !(uv__io_active(&req->handle->io_watcher, POLLIN)))
         flags = POLLHUP;
       else
         flags = POLLOUT;
+
+      if (req->handle->flags & UV_CLOSING)
+        continue;
 
       watcher->cb(loop, watcher, flags);
       continue;
@@ -912,32 +943,76 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     q = QUEUE_HEAD(&loop->watcher_queue);
     QUEUE_REMOVE(q);
     QUEUE_INIT(q);
-
     w = QUEUE_DATA(q, uv__io_t, watcher_queue);
+
     assert(w->pevents != 0);
     assert(w->fd >= 0);
-    assert(w->fd < (int) loop->nwatchers);
 
-    e.events = w->pevents;
-    e.data = w->fd;
+    uv_stream_t *stream= container_of(w, uv_stream_t, io_watcher);
+    if(stream->type == UV_TCP) {
 
-    if (w->events == 0)
-      op = UV__EPOLL_CTL_ADD;
-    else
-      op = UV__EPOLL_CTL_MOD;
+      if((w->pevents & POLLIN) && (stream->flags & UV_STREAM_READING) && stream->aio_read.aio_fildes == 0) {
+        stream->aio_read.aio_fildes = uv__stream_fd(stream);
+        stream->aio_read.aio_notifytype = AIO_MSGQ;
+        stream->aio_read.aio_cmd = AIO_READ;
+        stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
+        stream->aio_read_msg.mm_type = AIO_MSG_READ;
+        stream->aio_read_msg.mm_ptr = &stream->io_watcher;
+        stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
+        stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
+        if(stream->flags & UV_STREAM_READ_PARTIAL) {
+          uv_buf_t buf;
+          stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
+          stream->aio_read.aio_buf = buf.base;
+          stream->aio_read.aio_offset = 0;
+          stream->aio_read.aio_nbytes = buf.len;
+        }
+        else {
+          stream->aio_read.aio_buf = stream->bufsml;
+          stream->aio_read.aio_offset = 0;
+          stream->aio_read.aio_nbytes = sizeof(stream->bufsml);
+        }
 
-    /* XXX Future optimization: do EPOLL_CTL_MOD lazily if we stop watching
-     * events, skip the syscall and squelch the events after epoll_wait().
-     */
-    if (uv__epoll_ctl(loop->backend_fd, op, w->fd, &e)) {
-      if (errno != EEXIST)
-        abort();
+        int rv, rc, rsn;
+        ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+        if (rv == -1) {
+          stream->aio_read.aio_rv = rv;
+          stream->aio_read.aio_rc = rc;
+          w->cb(loop, w, POLLHUP);
+          timeout = 0;
+        }
+      }
 
-      assert(op == UV__EPOLL_CTL_ADD);
+      if((w->pevents & POLLOUT) && !stream->connect_req) {
+        if(uv__asyncio_zos_write(stream) != 0)
+          timeout = 0;
+      }
+    }
+    else {
 
-      /* We've reactivated a file descriptor that's been watched before. */
-      if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_MOD, w->fd, &e))
-        abort();
+      assert(w->fd < (int) loop->nwatchers);
+
+      e.events = w->pevents;
+      e.data = w->fd;
+
+      if (w->events == 0)
+        op = UV__EPOLL_CTL_ADD;
+      else
+        op = UV__EPOLL_CTL_MOD;
+
+      /* XXX Future optimization: do EPOLL_CTL_MOD lazily if we stop watching
+       * events, skip the syscall and squelch the events after epoll_wait().
+       */
+      if (uv__epoll_ctl(loop->backend_fd, op, w->fd, &e)) {
+        if (errno != EEXIST)
+          abort();
+
+        assert(op == UV__EPOLL_CTL_ADD);
+
+        /* We've reactivated a file descriptor that's been watched before. */
+        if (uv__epoll_ctl(loop->backend_fd, UV__EPOLL_CTL_MOD, w->fd, &e))
+          abort();
+      }
     }
 
     w->events = w->pevents;
@@ -1118,3 +1193,103 @@ static int maybe_new_socket(uv_tcp_t* handle, int domain, int flags) {
   return 0;
 }
 
+int uv__asyncio_zos_write(uv_stream_t *stream) {
+  uv_write_t *req = NULL;
+  if(!QUEUE_EMPTY(&stream->write_queue)) {
+    QUEUE* q = QUEUE_HEAD(&stream->write_queue);
+    req = QUEUE_DATA(q, uv_write_t, queue);
+    if(req->aio_write.aio_fildes != 0)
+      req = NULL;
+  }
+  else if(stream->flags & UV_STREAM_SHUTTING) {
+    uv__io_feed(stream->loop, &stream->io_watcher);
+    return -1;
+  }
+
+  if(!req)
+    return 0;
+
+  int iovmax, iovcnt;
+  iovmax = uv__getiovmax();
+
+  /* Limit iov count to avoid EINVALs from writev() */
+  if (iovcnt > iovmax)
+    iovcnt = iovmax;
+
+  uv_buf_t* buf = &(req->bufs[req->write_index]);
+  req->aio_write.aio_fildes = uv__stream_fd(stream);
+  req->aio_write.aio_notifytype = AIO_MSGQ;
+  req->aio_write.aio_cflags |= AIO_OK2COMPIMD; 
+  req->aio_write_msg.mm_type = AIO_MSG_WRITE;
+  req->aio_write_msg.mm_ptr = req;
+  req->aio_write.aio_msgev_addr = &req->aio_write_msg;
+  req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
+  if(req->nbufs > 1) {
+    /* vector */
+    req->aio_write.aio_cmd = AIO_WRITEV;
+    req->aio_write.aio_buf = &(req->bufs[req->write_index]);
+    iovcnt = req->nbufs - req->write_index;
+    if (iovcnt > iovmax)
+      iovcnt = iovmax;
+    req->aio_write.aio_nbytes = iovcnt;
+  } else {
+    req->aio_write.aio_cmd = AIO_WRITE;
+    req->aio_write.aio_buf = buf->base;
+    req->aio_write.aio_nbytes = buf->len;
+  }
+  req->aio_write.aio_msgev_qid = stream->loop->msgqid;
+
+  if(req->aio_write.aio_nbytes == 0) 
+    return 1;
+
+  int rv, rc, rsn;
+  ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
+  if(rv == 0)                                                   
+   /* Asynchronous write */                                    
+    uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
+  else if(rv == -1) {                                           
+   req->aio_write.aio_rv = rv;                                 
+   req->aio_write.aio_rc = rc;                                 
+  }                                                             
+  else {                                                        
+   /* Synchronous write or failure */                          
+   //uv__write(stream);                                          
+    uv__io_feed(stream->loop, &stream->io_watcher);             
+  }                                                             
+
+
+#if 0
+  if (rv == -1) {
+    req->aio_write.aio_rv = rv;
+    req->aio_write.aio_rc = rc;
+    stream->io_watcher.cb(stream->loop, &stream->io_watcher, POLLHUP);
+  }
+  else if(rv == 0)
+    uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
+  else if(rv == 1) 
+    //if(uv__io_active(&stream->io_watcher, POLLOUT))
+      //stream->io_watcher.cb(stream->loop, &stream->io_watcher, POLLOUT);
+      uv__io_feed(stream->loop, &stream->io_watcher);
+#endif
+
+  return rv;
+}
+
+int uv__asyncio_zos_cancel(uv_stream_t *stream) {
+
+  struct aiocb aio_cancel;
+  memset(&aio_cancel, 0, sizeof(struct aiocb));
+  aio_cancel.aio_fildes = uv__stream_fd(stream);
+  aio_cancel.aio_notifytype = AIO_MSGQ;
+  aio_cancel.aio_cmd = AIO_CANCEL;
+  aio_cancel.aio_buf = NULL;
+  aio_cancel.aio_nbytes = 0;
+  int rv, rc, rsn;
+  do {
+    ZASYNC(sizeof(aio_cancel), &aio_cancel, &rv, &rc, &rsn);
+  } while(aio_cancel.aio_rv == 1 || aio_cancel.aio_rv == 2);
+
+  int fd=uv__stream_fd(stream);
+  shutdown(&fd, SHUT_WR);
+  return rv;
+}

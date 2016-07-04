@@ -27,6 +27,9 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
+#if defined(__MVS__)
+#include <xti.h>
+#endif
 
 #if defined(IPV6_JOIN_GROUP) && !defined(IPV6_ADD_MEMBERSHIP)
 # define IPV6_ADD_MEMBERSHIP IPV6_JOIN_GROUP

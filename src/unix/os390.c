@@ -860,6 +860,9 @@ static int async_message(uv_loop_t* loop) {
 
       if(!(stream->flags & UV_CLOSING))
         watcher->cb(loop, watcher, flags);
+
+      if(stream->accepted_fd != -1)
+        memset(&stream->aio_read, 0, sizeof(struct aiocb));
       continue;
     }
     else if(msgin[i].mm_type == AIO_MSG_WRITE)
@@ -950,6 +953,11 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
     uv_stream_t *stream= container_of(w, uv_stream_t, io_watcher);
     if(stream->type == UV_TCP) {
+
+      if((w->pevents & POLLIN) && !(stream->flags & UV_STREAM_READING) && stream->aio_read.aio_fildes == 0) {
+        if(uv__asyncio_zos_accept(stream) != 0)
+          timeout = 0;
+      }
 
       if((w->pevents & POLLIN) && (stream->flags & UV_STREAM_READING) && stream->aio_read.aio_fildes == 0) {
         stream->aio_read.aio_fildes = uv__stream_fd(stream);
@@ -1271,6 +1279,26 @@ int uv__asyncio_zos_write(uv_stream_t *stream) {
       //stream->io_watcher.cb(stream->loop, &stream->io_watcher, POLLOUT);
       uv__io_feed(stream->loop, &stream->io_watcher);
 #endif
+
+  return rv;
+}
+
+int uv__asyncio_zos_accept(uv_stream_t *stream) {
+  stream->aio_read.aio_fildes = stream->io_watcher.fd;
+  stream->aio_read.aio_notifytype = AIO_MSGQ;
+  stream->aio_read.aio_cmd = AIO_ACCEPT;
+  stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
+  stream->aio_read_msg.mm_type = AIO_MSG_ACCEPT;
+  stream->aio_read_msg.mm_ptr = &stream->io_watcher;
+
+  stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
+  stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
+  int rv, rc, rsn;
+  ZASYNC(sizeof(struct aiocb), &stream->aio_read, &rv, &rc, &rsn);
+  if(rv == -1) {                                           
+   stream->aio_read.aio_rv = rv;                                 
+   stream->aio_read.aio_rc = rc;                                 
+  }
 
   return rv;
 }

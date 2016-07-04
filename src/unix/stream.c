@@ -582,6 +582,12 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       return;
     }
 
+#if defined(__MVS__)
+    if (stream->flags & UV_STREAM_BLOCKING && uv__asyncio_zos_accept(stream) == 0) {
+      return;
+    }
+#endif
+
     if (stream->type == UV_TCP && (stream->flags & UV_TCP_SINGLE_ACCEPT)) {
       /* Give other processes a chance to accept connections. */
       struct timespec timeout = { 0, 1 };
@@ -654,20 +660,7 @@ done:
   } else {
     server->accepted_fd = -1;
     if (err == 0)
-#if defined(__MVS__)
-    if(server->type != UV_TCP) 
       uv__io_start(server->loop, &server->io_watcher, POLLIN);
-    else if(!(server->flags & (UV_CLOSING | UV_CLOSED))){
-      if(uv__io_active(&server->io_watcher, POLLIN)) {
-        int rv, rc, rsn;
-        ZASYNC(sizeof(server->aio_read), &server->aio_read, &rv, &rc, &rsn);
-        assert(rv >= 0);
-      }
-    }
-#else
-      uv__io_start(server->loop, &server->io_watcher, POLLIN);
-#endif
-
   }
   return err;
 }

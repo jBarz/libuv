@@ -348,27 +348,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   /* Start listening for connections. */
   tcp->io_watcher.cb = uv__server_io;
 
-#if defined(__MVS__)
-  memset(&tcp->aio_read, 0, sizeof(struct aiocb));
-
-  tcp->aio_read.aio_fildes = tcp->io_watcher.fd;
-  tcp->aio_read.aio_notifytype = AIO_MSGQ;
-  tcp->aio_read.aio_cmd = AIO_ACCEPT;
-  tcp->aio_read.aio_msgev_qid = tcp->loop->msgqid;
-  tcp->aio_read_msg.mm_type = AIO_MSG_ACCEPT;
-  tcp->aio_read_msg.mm_ptr = &tcp->io_watcher;
-
-  tcp->aio_read.aio_msgev_addr = &tcp->aio_read_msg;
-  tcp->aio_read.aio_msgev_size = sizeof(tcp->aio_read_msg.mm_ptr);
-  int rv, rc, rsn;
-  ZASYNC(sizeof(struct aiocb), &tcp->aio_read, &rv, &rc, &rsn);
-  if (rv == -1)
-    return -rc;
-  else
-    uv__io_start(tcp->loop, &tcp->io_watcher, POLLIN);
-#else
   uv__io_start(tcp->loop, &tcp->io_watcher, POLLIN);
-#endif
 
   return 0;
 }

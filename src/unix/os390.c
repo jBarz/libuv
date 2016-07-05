@@ -1283,6 +1283,41 @@ int uv__asyncio_zos_write(uv_stream_t *stream) {
   return rv;
 }
 
+int uv__asyncio_zos_connect(uv_connect_t *req, uv_stream_t *stream, const struct sockaddr* addr, unsigned int addrlen) {
+  memset(&req->aio_connect, 0, sizeof(struct aiocb));
+  req->aio_connect.aio_fildes = uv__stream_fd(stream);
+  req->aio_connect.aio_notifytype = AIO_MSGQ;
+  req->aio_connect.aio_cmd = AIO_CONNECT;
+  req->aio_connect.aio_msgev_qid = stream->loop->msgqid;
+  req->aio_connect_msg.mm_type = AIO_MSG_CONNECT;
+  req->aio_connect_msg.mm_ptr = req;
+  req->aio_connect.aio_msgev_addr = &req->aio_connect_msg;
+  req->aio_connect.aio_msgev_size = sizeof(req->aio_connect_msg.mm_ptr);
+  req->aio_connect.aio_sockaddrlen = addrlen;
+  req->aio_connect.aio_sockaddrptr = (struct sockaddr_in*)uv__malloc(addrlen);
+  int rv, rc, rsn;
+  if (req->aio_connect.aio_sockaddrptr != NULL) {
+    memcpy(req->aio_connect.aio_sockaddrptr, addr, addrlen);
+    ZASYNC(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
+    if(rv < 0) {
+      errno = rc;
+      return -1;
+    }
+    else if(rv == 0){
+/* connect has not happened immediately
+   wait for notification */
+      errno = EINPROGRESS;
+      return -1;
+    }
+    else if(rv == 1) {
+/* do nothing. Just as if connect() succeeded */
+      return 0;
+    }
+  }
+
+  return -1;
+}
+
 int uv__asyncio_zos_accept(uv_stream_t *stream) {
   stream->aio_read.aio_fildes = stream->io_watcher.fd;
   stream->aio_read.aio_notifytype = AIO_MSGQ;

@@ -407,13 +407,10 @@ int uv__stream_open(uv_stream_t* stream, int fd, int flags) {
     if ((stream->flags & UV_TCP_KEEPALIVE) && uv__tcp_keepalive(fd, 1, 60))
       return -errno;
 
-#if defined(__MVS__)
-    if (uv__nonblock(fd, 0))
-      return -errno;
-    stream->flags |= UV_STREAM_BLOCKING;
-#endif
-
   }
+
+  if ((stream->flags & UV_STREAM_BLOCKING) && uv__nonblock(fd, 0))
+    return -errno;
 
 #if defined(__APPLE__)
   enable = 1;
@@ -608,12 +605,19 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
   if (server->accepted_fd == -1)
     return -EAGAIN;
 
+  int flags = UV_STREAM_READABLE | UV_STREAM_WRITABLE;
+
+#if defined(__MVS__)
+  if(client->type == UV_TCP)
+    flags |= UV_STREAM_BLOCKING;
+#endif
+
   switch (client->type) {
     case UV_NAMED_PIPE:
     case UV_TCP:
       err = uv__stream_open(client,
                             server->accepted_fd,
-                            UV_STREAM_READABLE | UV_STREAM_WRITABLE);
+                            flags);
       if (err) {
         /* TODO handle error */
         uv__close(server->accepted_fd);

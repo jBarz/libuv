@@ -102,7 +102,11 @@ int uv__tcp_bind(uv_tcp_t* tcp,
 
   err = maybe_new_socket(tcp,
                          addr->sa_family,
+#if defined(__MVS__)
+                         UV_STREAM_READABLE | UV_STREAM_WRITABLE | UV_STREAM_BLOCKING);
+#else
                          UV_STREAM_READABLE | UV_STREAM_WRITABLE);
+#endif
   if (err)
     return err;
 
@@ -163,7 +167,11 @@ int uv__tcp_connect(uv_connect_t* req,
 
   err = maybe_new_socket(handle,
                          addr->sa_family,
+#if defined(__MVS__)
+                         UV_STREAM_READABLE | UV_STREAM_WRITABLE | UV_STREAM_BLOCKING);
+#else
                          UV_STREAM_READABLE | UV_STREAM_WRITABLE);
+#endif
   if (err)
     return err;
 
@@ -211,15 +219,12 @@ int uv__tcp_connect(uv_connect_t* req,
 int uv_tcp_open(uv_tcp_t* handle, uv_os_sock_t sock) {
   int err;
 
-#if !defined(__MVS__)
-  err = uv__nonblock(sock, 1);
-  if (err)
-    return err;
-#endif
-
   return uv__stream_open((uv_stream_t*)handle, sock, 
 				  UV_STREAM_READABLE 
 				| UV_STREAM_WRITABLE
+#if defined(__MVS__)
+				| UV_STREAM_BLOCKING
+#endif
 				);
 }
 

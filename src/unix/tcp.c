@@ -158,7 +158,7 @@ int uv__tcp_connect(uv_connect_t* req,
                     unsigned int addrlen,
                     uv_connect_cb cb) {
   int err;
-  int r = -1;
+  int r;
 
   assert(handle->type == UV_TCP);
 
@@ -199,7 +199,6 @@ int uv__tcp_connect(uv_connect_t* req,
     else
       return -errno;
   }
-
 
   uv__req_init(handle->loop, req, UV_CONNECT);
   req->cb = cb;
@@ -302,10 +301,6 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
     struct sockaddr_in saddr;
     unsigned namelen = sizeof saddr;
     memset(&saddr, 0, sizeof saddr);
-/*
-    saddr.sin_port=0;
-    saddr.sin_addr.s_addr = INADDR_ANY;
-*/
     saddr.sin_family = AF_INET;
     if( bind(tcp->io_watcher.fd, (struct sockaddr*)&saddr, sizeof saddr)) {
       if (errno == EAFNOSUPPORT)
@@ -318,11 +313,11 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
 
   if (listen(tcp->io_watcher.fd, backlog))
     return -errno;
+
   tcp->connection_cb = cb;
 
   /* Start listening for connections. */
   tcp->io_watcher.cb = uv__server_io;
-
   uv__io_start(tcp->loop, &tcp->io_watcher, POLLIN);
 
   return 0;

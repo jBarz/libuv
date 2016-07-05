@@ -983,8 +983,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
         int rv, rc, rsn;
         ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-        printf("JBAR AIO_READ handle=%p fd=%d, rv=%d rc=%d rsn=%d\n", 
-          stream, uv__stream_fd(stream), rv, rc, rsn);
         if (rv == -1 && rc == ECONNRESET) {
           stream->aio_read.aio_rv = 0;
           w->cb(loop, w, POLLIN | POLLHUP);

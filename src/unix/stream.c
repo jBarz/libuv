@@ -580,9 +580,8 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
     }
 
 #if defined(__MVS__)
-    if (stream->flags & UV_STREAM_BLOCKING && uv__asyncio_zos_accept(stream) == 0) {
+    if (stream->flags & UV_STREAM_BLOCKING && uv__asyncio_zos_accept(stream) == 0)
       return;
-    }
 #endif
 
     if (stream->type == UV_TCP && (stream->flags & UV_TCP_SINGLE_ACCEPT)) {
@@ -776,7 +775,6 @@ static int uv__handle_fd(uv_handle_t* handle) {
       return -1;
   }
 }
-
 
 static void uv__write(uv_stream_t* stream) {
   struct iovec* iov;
@@ -1264,7 +1262,7 @@ static void uv__read(uv_stream_t* stream) {
         stream->read_cb(stream, -errno, &buf);
         if (stream->flags & UV_STREAM_READING) {
           stream->flags &= ~UV_STREAM_READING;
-         uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
+          uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
           if (!uv__io_active(&stream->io_watcher, POLLOUT))
             uv__handle_stop(stream);
           uv__stream_osx_interrupt_select(stream);
@@ -1362,7 +1360,6 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
   uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
   uv__stream_osx_interrupt_select(stream);
 
-
   return 0;
 }
 
@@ -1375,7 +1372,6 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(stream->type == UV_TCP ||
          stream->type == UV_NAMED_PIPE ||
          stream->type == UV_TTY);
-
   assert(!(stream->flags & UV_CLOSING));
 
   if (stream->connect_req) {
@@ -1426,7 +1422,7 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
  * getsockopt.
  */
 static void uv__stream_connect(uv_stream_t* stream) {
-  int error = 0;
+  int error;
   uv_connect_t* req = stream->connect_req;
   socklen_t errorsize = sizeof(int);
 
@@ -1442,6 +1438,7 @@ static void uv__stream_connect(uv_stream_t* stream) {
     stream->delayed_error = 0;
   } else {
 #if defined(__MVS__)
+    error = 0;
     if(stream->type == UV_TCP) {
       free(req->aio_connect.aio_sockaddrptr);
       error = aio_error(&req->aio_connect);
@@ -1464,11 +1461,11 @@ static void uv__stream_connect(uv_stream_t* stream) {
 #else
     /* Normal situation: we need to get the socket error from the kernel. */
     assert(uv__stream_fd(stream) >= 0);
-    assert(0 == getsockopt(uv__stream_fd(stream),
+    getsockopt(uv__stream_fd(stream),
                SOL_SOCKET,
                SO_ERROR,
                &error,
-               &errorsize));
+               &errorsize);
     error = -error;
 #endif
   }
@@ -1479,8 +1476,9 @@ static void uv__stream_connect(uv_stream_t* stream) {
   stream->connect_req = NULL;
   uv__req_unregister(stream->loop, req);
 
-  if (error < 0 || QUEUE_EMPTY(&stream->write_queue))
+  if (error < 0 || QUEUE_EMPTY(&stream->write_queue)) {
     uv__io_stop(stream->loop, &stream->io_watcher, POLLOUT);
+  }
 
   if (req->cb)
     req->cb(req, error);
@@ -1574,19 +1572,17 @@ int uv_write2(uv_write_t* req,
     uv__write(stream);
   }
   else {
-
     /*
-    * blocking streams should never have anything in the queue.
-    * if this assert fires then somehow the blocking stream isn't being
-    * sufficiently flushed in uv__write.
-    */
+     * blocking streams should never have anything in the queue.
+     * if this assert fires then somehow the blocking stream isn't being
+     * sufficiently flushed in uv__write.
+     */
 
 #if !defined(__MVS__)
     assert(!(stream->flags & UV_STREAM_BLOCKING));
 #endif
     uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
     uv__stream_osx_interrupt_select(stream);
-
   }
 
   return 0;

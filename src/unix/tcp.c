@@ -172,37 +172,7 @@ int uv__tcp_connect(uv_connect_t* req,
   do
   {
 #if defined(__MVS__)
-    int rv, rc, rsn;
-    memset(&req->aio_connect, 0, sizeof(struct aiocb));
-    req->aio_connect.aio_fildes = uv__stream_fd(handle);
-    req->aio_connect.aio_notifytype = AIO_MSGQ;
-    req->aio_connect.aio_cmd = AIO_CONNECT;
-    req->aio_connect.aio_msgev_qid = handle->loop->msgqid;
-    req->aio_connect_msg.mm_type = AIO_MSG_CONNECT;
-    req->aio_connect_msg.mm_ptr = req;
-    req->aio_connect.aio_msgev_addr = &req->aio_connect_msg;
-    req->aio_connect.aio_msgev_size = sizeof(req->aio_connect_msg.mm_ptr);
-    req->aio_connect.aio_sockaddrlen = addrlen;
-    req->aio_connect.aio_sockaddrptr = (struct sockaddr_in*)uv__malloc(addrlen);
-    if (req->aio_connect.aio_sockaddrptr != NULL) {
-      memcpy(req->aio_connect.aio_sockaddrptr, addr, addrlen);
-      ZASYNC(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
-      if(rv < 0) {
-        r = rv;
-        errno = rc;
-      }
-      else if(rv == 0){
-	/* connect has not happened immediately 
-	   wait for notification */
-        r = -1;
-        errno = EINPROGRESS;
-        uv__io_start(handle->loop, &handle->io_watcher, POLLOUT);
-      }
-      else if(rv == 1) {
-	/* do nothing. Just as if connect() succeeded */
-        r = 1;
-      }
-    }
+    r = uv__asyncio_zos_connect(req, handle, addr, addrlen);
 #else
     r = connect(uv__stream_fd(handle), addr, addrlen);
 #endif

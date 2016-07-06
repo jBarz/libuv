@@ -10,9 +10,26 @@
           ['OS=="solaris"', {
             'cflags': [ '-pthreads' ],
           }],
-          ['OS not in "solaris android"', {
+          ['OS not in "solaris android zos"', {
             'cflags': [ '-pthread' ],
           }],
+          ['OS in "zos"', {
+            'defines': [
+              '_UNIX03_THREADS',
+              '_UNIX03_SOURCE',
+              '_OPEN_SYS_IF_EXT',
+              '_OPEN_SYS_SOCK_IPV6',
+              '_OPEN_MSGQ_EXT',
+              '_XOPEN_SOURCE_EXTENDED',
+              '_ALL_SOURCE',
+              '_LARGE_TIME_API',
+              '_OPEN_SYS_FILE_EXT',
+              '_AE_BIMODAL',
+              'PATH_MAX=255'
+            ],
+            'cflags': [ '-qxplink' ],
+            'ldflags': [ '-qxplink' ],
+          }]
         ],
       }],
     ],
@@ -118,15 +135,6 @@
             ],
           },
         }, { # Not Windows i.e. POSIX
-          'cflags': [
-            '-fvisibility=hidden',
-            '-g',
-            '--std=gnu89',
-            '-pedantic',
-            '-Wall',
-            '-Wextra',
-            '-Wno-unused-parameter',
-          ],
           'sources': [
             'include/uv-unix.h',
             'include/uv-linux.h',
@@ -162,16 +170,25 @@
               ['OS=="solaris"', {
                 'ldflags': [ '-pthreads' ],
               }],
-              ['OS != "solaris" and OS != "android"', {
+              [ 'OS=="zos" and uv_library=="shared_library"', {
+                'ldflags': [ '-Wl,DLL' ],
+              }],
+              ['OS != "solaris" and OS != "android" and OS != "zos"', {
                 'ldflags': [ '-pthread' ],
               }],
             ],
           },
           'conditions': [
             ['uv_library=="shared_library"', {
-              'cflags': [ '-fPIC' ],
+              'conditions': [
+                ['OS=="zos"', {
+                  'cflags': [ '-qexportall' ],
+                }, {
+                  'cflags': [ '-fPIC' ],
+                }],
+              ],
             }],
-            ['uv_library=="shared_library" and OS!="mac"', {
+            ['uv_library=="shared_library" and OS!="mac" and OS!="zos"', {
               # This will cause gyp to set soname
               # Must correspond with UV_VERSION_MAJOR
               # in include/uv-version.h
@@ -181,6 +198,17 @@
         }],
         [ 'OS in "linux mac ios android"', {
           'sources': [ 'src/unix/proctitle.c' ],
+        }],
+        [ 'OS != "zos"', {
+          'cflags': [
+            '-fvisibility=hidden',
+            '-g',
+            '--std=gnu89',
+            '-pedantic',
+            '-Wall',
+            '-Wextra',
+            '-Wno-unused-parameter',
+          ],
         }],
         [ 'OS in "mac ios"', {
           'sources': [
@@ -194,7 +222,7 @@
             '_DARWIN_UNLIMITED_SELECT=1',
           ]
         }],
-        [ 'OS!="mac"', {
+        [ 'OS!="mac" and OS!="zos"', {
           # Enable on all platforms except OS X. The antique gcc/clang that
           # ships with Xcode emits waaaay too many false positives.
           'cflags': [ '-Wstrict-aliasing' ],
@@ -425,13 +453,17 @@
           ],
           'libraries': [ '-lws2_32' ]
         }, { # POSIX
-          'defines': [ '_GNU_SOURCE' ],
-          'cflags': [ '-Wno-long-long' ],
           'sources': [
             'test/runner-unix.c',
             'test/runner-unix.h',
           ],
-        }],
+          'conditions': [ 
+            [ 'OS != "zos"', {
+              'defines': [ '_GNU_SOURCE' ],
+              'cflags': [ '-Wno-long-long' ],
+            }], 
+          ]},
+        ],
         [ 'OS in "mac dragonflybsd freebsd linux netbsd openbsd".split()', {
           'link_settings': {
             'libraries': [ '-lutil' ],
@@ -450,7 +482,12 @@
           ],
         }],
         ['uv_library=="shared_library"', {
-          'defines': [ 'USING_UV_SHARED=1' ]
+          'defines': [ 'USING_UV_SHARED=1' ],
+          'conditions': [ 
+            [ 'OS == "zos"', {
+              'cflags': [ '-Wc,DLL' ],
+            }], 
+          ],
         }],
       ],
       'msvs-settings': {
@@ -506,7 +543,12 @@
           ]
         }],
         ['uv_library=="shared_library"', {
-          'defines': [ 'USING_UV_SHARED=1' ]
+          'defines': [ 'USING_UV_SHARED=1' ],
+          'conditions': [ 
+            [ 'OS == "zos"', {
+              'cflags': [ '-Wc,DLL' ],
+            }], 
+          ],
         }],
       ],
       'msvs-settings': {

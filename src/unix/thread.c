@@ -314,7 +314,9 @@ int uv_sem_init(uv_sem_t* sem, unsigned int value) {
   struct sembuf buf;
   int op_status;
 
-  buf = { 0, value, 0 };
+  buf.sem_num = 0;
+  buf.sem_op = value;
+  buf.sem_flg = 0;
 
   semid = semget(IPC_PRIVATE, 1, S_IRUSR | S_IWUSR);
   if (semid == -1)
@@ -330,7 +332,7 @@ int uv_sem_init(uv_sem_t* sem, unsigned int value) {
 
 void uv_sem_destroy(uv_sem_t* sem) {
   int op_status; 
-  op_status = semctl( *sem, 0, IPC_RMID);
+  op_status = semctl(*sem, 0, IPC_RMID);
 
   if (op_status == -1)
     abort();
@@ -340,7 +342,10 @@ void uv_sem_post(uv_sem_t* sem) {
   struct sembuf buf;
   int op_status;
 
-  buf= { 0, 1, 0 };
+  buf.sem_num = 0;
+  buf.sem_op = 1;
+  buf.sem_flg = 0;
+
   op_status = semop(*sem, &buf, 1);
   if (op_status == -1)
     abort();
@@ -350,7 +355,9 @@ void uv_sem_wait(uv_sem_t* sem) {
   struct sembuf buf;
   int op_status;
   
-  buf = { 0, -1, 0 };
+  buf.sem_num = 0;
+  buf.sem_op = -1;
+  buf.sem_flg = 0;
 
   do
     op_status = semop(*sem, &buf, 1);
@@ -364,11 +371,13 @@ int uv_sem_trywait(uv_sem_t* sem) {
   struct sembuf buf;
   int op_status;
 
-  buf = { 0, -1, IPC_NOWAIT };
+  buf.sem_num = 0;
+  buf.sem_op = -1;
+  buf.sem_flg = IPC_NOWAIT;
 
   do
     op_status = semop(*sem, &s, 1);
-  while (r == -1 && errno == EINTR);
+  while (op_status == -1 && errno == EINTR);
 
   if (op_status) {
     if (errno == EAGAIN)

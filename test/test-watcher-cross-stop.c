@@ -59,9 +59,6 @@ static void close_cb(uv_handle_t* handle) {
 
 
 TEST_IMPL(watcher_cross_stop) {
-#if defined(__MVS__)
-  RETURN_SKIP("IBM WORK ITEM: 130119");
-#endif
 
   uv_loop_t* loop = uv_default_loop();
   unsigned int i;

@@ -36,7 +36,9 @@
 #include <termios.h>
 #include <pwd.h>
 
+#if !defined(__MVS__)
 #include <semaphore.h>
+#endif
 #include <pthread.h>
 #include <signal.h>
 
@@ -102,7 +104,9 @@ struct uv__async {
   int wfd;
 };
 
-#ifndef UV_PLATFORM_SEM_T
+#if defined(__MVS__)
+# define UV_PLATFORM_SEM_T  int
+#elif !defined UV_PLATFORM_SEM_T
 # define UV_PLATFORM_SEM_T sem_t
 #endif
 

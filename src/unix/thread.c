@@ -32,6 +32,11 @@
 
 #include <limits.h>
 
+#ifdef __MVS__
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#endif
+
 #undef NANOSEC
 #define NANOSEC ((uint64_t) 1e9)
 
@@ -300,6 +305,65 @@ int uv_sem_trywait(uv_sem_t* sem) {
 
   abort();
   return -EINVAL;  /* Satisfy the compiler. */
+}
+
+#elif defined(__MVS__)
+
+int uv_sem_init(uv_sem_t* sem, unsigned int value) {
+  uv_sem_t a = semget(IPC_PRIVATE, 1, S_IRUSR | S_IWUSR);
+  if (a == -1)
+    return -errno;
+
+  struct sembuf s = { 0, value, 0 };
+  int b = semop(a, &s, 1); 
+  if (b == -1)
+    return -errno;
+
+  *sem = a;
+  return 0;
+}
+
+void uv_sem_destroy(uv_sem_t* sem) {
+  int a = semctl( *sem, 0, IPC_RMID);
+
+  if (a == -1)
+    abort();
+}
+
+void uv_sem_post(uv_sem_t* sem) {
+  struct sembuf s = { 0, 1, 0 };
+  int a = semop(*sem, &s, 1);
+  if (a==-1)
+    abort();
+}
+
+void uv_sem_wait(uv_sem_t* sem) {
+  int r;
+  struct sembuf s = { 0, -1, 0 };
+
+  do
+    r = semop(*sem, &s, 1);
+  while (r == -1 && errno == EINTR);
+
+  if (r)
+    abort();
+}
+
+int uv_sem_trywait(uv_sem_t* sem) {
+  int r;
+  struct sembuf s = { 0, -1, IPC_NOWAIT };
+
+  do
+    r = semop(*sem, &s, 1);
+  while (r == -1 && errno == EINTR);
+
+  if (r) {
+    if (errno == EAGAIN)
+      return -EAGAIN;
+    abort();
+  }
+
+  return 0;
 }
 
 #else /* !(defined(__APPLE__) && defined(__MACH__)) */

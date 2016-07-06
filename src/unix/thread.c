@@ -376,7 +376,7 @@ int uv_sem_trywait(uv_sem_t* sem) {
   buf.sem_flg = IPC_NOWAIT;
 
   do
-    op_status = semop(*sem, &s, 1);
+    op_status = semop(*sem, &buf, 1);
   while (op_status == -1 && errno == EINTR);
 
   if (op_status) {

@@ -286,21 +286,21 @@ test_run_tests_CFLAGS += -D__EXTENSIONS__ -D_XOPEN_SOURCE=500
 endif
 
 if OS390
-test_run_tests_CFLAGS +=  -D_UNIX03_THREADS \
-                          -D_UNIX03_SOURCE \
-                          -D_OPEN_SYS_IF_EXT=1 \
-                          -D_OPEN_SYS_SOCK_IPV6 \
-                          -D_OPEN_MSGQ_EXT \
-                          -D_XOPEN_SOURCE_EXTENDED \
-                          -D_ALL_SOURCE \
-                          -D_LARGE_TIME_API \
-                          -D_OPEN_SYS_FILE_EXT \
-                          -DUV_PLATFORM_SEM_T=int \
-                          -DUTMP_FILE=\"/etc/utmpx\" \
-                          -DPATH_MAX=255 \
-                          -qCHARS=signed \
-                          -qXPLINK \
-                          -qFLOAT=IEEE
+test_run_tests_CFLAGS += -D_UNIX03_THREADS \
+                         -D_UNIX03_SOURCE \
+                         -D_OPEN_SYS_IF_EXT=1 \
+                         -D_OPEN_SYS_SOCK_IPV6 \
+                         -D_OPEN_MSGQ_EXT \
+                         -D_XOPEN_SOURCE_EXTENDED \
+                         -D_ALL_SOURCE \
+                         -D_LARGE_TIME_API \
+                         -D_OPEN_SYS_FILE_EXT \
+                         -DUV_PLATFORM_SEM_T=int \
+                         -DUTMP_FILE=\"/etc/utmpx\" \
+                         -DPATH_MAX=255 \
+                         -qCHARS=signed \
+                         -qXPLINK \
+                         -qFLOAT=IEEE
 endif
 
 if AIX
@@ -374,21 +374,21 @@ endif
 
 if OS390
 include_HEADERS += include/uv-os390.h include/pthread-fixes.h include/pthread-barrier.h
-libuv_la_CFLAGS +=  -D_UNIX03_THREADS \
-                    -D_UNIX03_SOURCE \
-                    -D_OPEN_SYS_IF_EXT=1 \
-                    -D_OPEN_MSGQ_EXT \
-                    -D_XOPEN_SOURCE_EXTENDED \
-                    -D_ALL_SOURCE \
-                    -D_LARGE_TIME_API \
-                    -D_OPEN_SYS_SOCK_IPV6 \
-                    -D_OPEN_SYS_FILE_EXT \
-                    -DUV_PLATFORM_SEM_T=int \
-                    -DUTMP_FILE=\"/etc/utmpx\" \
-                    -DPATH_MAX=255 \
-                    -qCHARS=signed \
-                    -qXPLINK \
-                    -qFLOAT=IEEE
+libuv_la_CFLAGS += -D_UNIX03_THREADS \
+                   -D_UNIX03_SOURCE \
+                   -D_OPEN_SYS_IF_EXT=1 \
+                   -D_OPEN_MSGQ_EXT \
+                   -D_XOPEN_SOURCE_EXTENDED \
+                   -D_ALL_SOURCE \
+                   -D_LARGE_TIME_API \
+                   -D_OPEN_SYS_SOCK_IPV6 \
+                   -D_OPEN_SYS_FILE_EXT \
+                   -DUV_PLATFORM_SEM_T=int \
+                   -DUTMP_FILE=\"/etc/utmpx\" \
+                   -DPATH_MAX=255 \
+                   -qCHARS=signed \
+                   -qXPLINK \
+                   -qFLOAT=IEEE
 libuv_la_LDFLAGS += -qXPLINK
 libuv_la_SOURCES += src/unix/os390.c \
                     src/unix/os390-epoll.c \

@@ -25,7 +25,7 @@ AC_ENABLE_STATIC
 AC_PROG_CC
 AM_PROG_CC_C_O
 AS_IF([AS_CASE([$host_os],[openedition*],  [false], [true])], [
-	CC_CHECK_CFLAGS_APPEND([-pedantic])
+  CC_CHECK_CFLAGS_APPEND([-pedantic])
 ])
 CC_FLAG_VISIBILITY #[-fvisibility=hidden]
 CC_CHECK_CFLAGS_APPEND([-g])

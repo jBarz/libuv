@@ -396,7 +396,7 @@ static void connection_poll_cb(uv_poll_t* handle, int status, int events) {
   }
 
   if (context->got_fin && context->sent_fin && context->got_disconnect) {
-#else /* _AIX  && __MVS */
+#else /* _AIX  && __MVS__ */
   if (context->got_fin && context->sent_fin) {
 #endif /* !_AIX && !__MVS__  */
     /* Sent and received FIN. Close and destroy context. */

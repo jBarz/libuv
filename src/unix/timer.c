@@ -31,14 +31,8 @@ static int timer_less_than(const struct heap_node* ha,
   const uv_timer_t* a;
   const uv_timer_t* b;
 
-#ifdef __MVS__
-  // can't  use const with this builtin
   a = container_of(ha, uv_timer_t, heap_node);
   b = container_of(hb, uv_timer_t, heap_node);
-#else
-  a = container_of(ha, const uv_timer_t, heap_node);
-  b = container_of(hb, const uv_timer_t, heap_node);
-#endif
 
   if (a->timeout < b->timeout)
     return 1;
@@ -141,12 +135,7 @@ int uv__next_timeout(const uv_loop_t* loop) {
   if (heap_node == NULL)
     return -1; /* block indefinitely */
 
-#ifdef __MVS__
-  //can't use const in this builtin
   handle = container_of(heap_node, uv_timer_t, heap_node);
-#else
-  handle = container_of(heap_node, const uv_timer_t, heap_node);
-#endif
   if (handle->timeout <= loop->time)
     return 0;
 

@@ -106,9 +106,7 @@ struct uv__async {
   int wfd;
 };
 
-#if defined(__MVS__)
-# define UV_PLATFORM_SEM_T  int
-#elif !defined UV_PLATFORM_SEM_T
+#ifndef UV_PLATFORM_SEM_T
 # define UV_PLATFORM_SEM_T sem_t
 #endif
 

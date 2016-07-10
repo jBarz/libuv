@@ -440,18 +440,11 @@ int uv_sem_trywait(uv_sem_t* sem) {
 #endif /* defined(__APPLE__) && defined(__MACH__) */
 
 
-#if defined(__APPLE__) && defined(__MACH__)
+#if defined(__APPLE__) && defined(__MACH__) || defined(__MVS__)
 
 int uv_cond_init(uv_cond_t* cond) {
   return -pthread_cond_init(cond, NULL);
 }
-
-#elif defined __MVS__
-
-int uv_cond_init(uv_cond_t* cond) {
-  return -pthread_cond_init(cond, NULL);
-}
-
 
 #else /* !(defined(__APPLE__) && defined(__MACH__)) */
 

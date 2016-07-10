@@ -100,7 +100,7 @@ void uv__stream_init(uv_loop_t* loop,
 
 #if defined(__APPLE__)
   stream->select = NULL;
-#else
+#elif defined(__MVS__)
   memset(&stream->aio_read, 0, sizeof(struct aiocb));
 #endif /* defined(__APPLE_) */
 

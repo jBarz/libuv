@@ -179,11 +179,7 @@ int uv__tcp_connect(uv_connect_t* req,
 
   do
   {
-#if defined(__MVS__)
-    r = uv__asyncio_zos_connect(req, handle, addr, addrlen);
-#else
-    r = connect(uv__stream_fd(handle), addr, addrlen);
-#endif
+    r = uv__async_connect(req, handle, addr, addrlen);
   }
   while (r == -1 && errno == EINTR);
 

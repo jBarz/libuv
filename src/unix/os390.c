@@ -1289,7 +1289,7 @@ int uv__asyncio_zos_write(uv_stream_t *stream) {
   return rv;
 }
 
-int uv__asyncio_zos_connect(uv_connect_t *req, uv_stream_t *stream, const struct sockaddr* addr, unsigned int addrlen) {
+int uv__zos_aio_connect(uv_connect_t *req, uv_stream_t *stream, const struct sockaddr* addr, unsigned int addrlen) {
   memset(&req->aio_connect, 0, sizeof(struct aiocb));
   req->aio_connect.aio_fildes = uv__stream_fd(stream);
   req->aio_connect.aio_notifytype = AIO_MSGQ;

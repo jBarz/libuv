@@ -23,6 +23,7 @@
 #ifndef UV_OS390_SYSCALL_H_
 #define UV_OS390_SYSCALL_H_
 
+#include "uv.h"
 #include "os390-epoll.h"
 #include <dirent.h>
 
@@ -33,9 +34,16 @@
 #define UV__EPOLL_CTL_MOD         3
 #define UV__EPOLL_CTL_ADD_MSGQ    4
 
+#define uv__async_connect      uv__zos_aio_connect
+
 struct uv__epoll_event {
   uint32_t events;
   uint32_t data;
 };
+
+/* posix aio interface */
+int uv__zos_aio_connect(uv_connect_t *req, uv_stream_t *str,
+                         const struct sockaddr* addr,
+                         unsigned int addrlen);
 
 #endif /* UV_OS390_SYSCALL_H_ */

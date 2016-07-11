@@ -265,9 +265,13 @@ int uv___stream_fd(const uv_stream_t* handle);
 #endif /* defined(__APPLE__) */
 
 #if defined(__MVS__)
-int uv__asyncio_zos_connect(uv_connect_t *req, uv_stream_t *str, const struct sockaddr* addr, unsigned int addrlen);
 int uv__asyncio_zos_write(uv_stream_t *str);
 int uv__asyncio_zos_cancel(uv_stream_t *str);
+#endif
+
+#ifndef uv__async_connect
+#define uv__async_connect(req, handle, addr, addrlen) \
+        connect(uv__stream_fd(handle), addr, addrlen)
 #endif
 
 #ifdef UV__O_NONBLOCK

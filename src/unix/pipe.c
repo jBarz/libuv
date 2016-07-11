@@ -69,9 +69,6 @@ int uv_pipe_bind(uv_pipe_t* handle, const char* name) {
   memset(&saddr, 0, sizeof saddr);
   strncpy(saddr.sun_path, pipe_fname, sizeof(saddr.sun_path) - 1);
   saddr.sun_path[sizeof(saddr.sun_path) - 1] = '\0';
-#if defined(__MVS__)
-  saddr.sun_len = strlen(saddr.sun_path);
-#endif
   saddr.sun_family = AF_UNIX;
 
   if (bind(sockfd, (struct sockaddr*)&saddr, sizeof saddr)) {
@@ -175,9 +172,6 @@ void uv_pipe_connect(uv_connect_t* req,
   memset(&saddr, 0, sizeof saddr);
   strncpy(saddr.sun_path, name, sizeof(saddr.sun_path) - 1);
   saddr.sun_path[sizeof(saddr.sun_path) - 1] = '\0';
-#if defined(__MVS__)
-  saddr.sun_len = strlen(saddr.sun_path);
-#endif
   saddr.sun_family = AF_UNIX;
 
   do {

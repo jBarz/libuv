@@ -95,18 +95,18 @@ int uv__tcp_bind(uv_tcp_t* tcp,
                  unsigned int flags) {
   int err;
   int on;
+  int sockflags;
 
   /* Cannot set IPv6-only mode on non-IPv6 socket. */
   if ((flags & UV_TCP_IPV6ONLY) && addr->sa_family != AF_INET6)
     return -EINVAL;
 
-  err = maybe_new_socket(tcp,
-                         addr->sa_family,
+  sockflags = UV_STREAM_READABLE | UV_STREAM_WRITABLE;
 #if defined(__MVS__)
-                         UV_STREAM_READABLE | UV_STREAM_WRITABLE | UV_STREAM_BLOCKING);
-#else
-                         UV_STREAM_READABLE | UV_STREAM_WRITABLE);
+  sockflags |= UV_STREAM_BLOCKING;
 #endif
+
+  err = maybe_new_socket(tcp, addr->sa_family, sockflags);
   if (err)
     return err;
 
@@ -159,19 +159,19 @@ int uv__tcp_connect(uv_connect_t* req,
                     uv_connect_cb cb) {
   int err;
   int r;
+  int sockflags;
 
   assert(handle->type == UV_TCP);
 
   if (handle->connect_req != NULL)
     return -EALREADY;  /* FIXME(bnoordhuis) -EINVAL or maybe -EBUSY. */
 
-  err = maybe_new_socket(handle,
-                         addr->sa_family,
+  sockflags = UV_STREAM_READABLE | UV_STREAM_WRITABLE;
 #if defined(__MVS__)
-                         UV_STREAM_READABLE | UV_STREAM_WRITABLE | UV_STREAM_BLOCKING);
-#else
-                         UV_STREAM_READABLE | UV_STREAM_WRITABLE);
+  sockflags |= UV_STREAM_BLOCKING;
 #endif
+
+  err = maybe_new_socket(handle, addr->sa_family, sockflags);
   if (err)
     return err;
 

@@ -386,14 +386,5 @@ void rewind_cursor(void) {
 
 /* Pause the calling thread for a number of milliseconds. */
 void uv_sleep(int msec) {
-#if defined(__MVS__)
-  int seconds = msec / 1000;
-  int microseconds = (msec % 1000) * 1000;
-  if(seconds)
-    sleep(seconds);
-  if(microseconds)
-    usleep(microseconds);
-#else
   usleep(msec * 1000);
-#endif
 }

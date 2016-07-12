@@ -822,6 +822,7 @@ static int async_message(uv_loop_t* loop) {
       stream = container_of(watcher, uv_stream_t, io_watcher);
 
 
+      //printf("JBAR AIO_MSG_READ fd=%d\n", uv__stream_fd(stream));
       if (stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
         flags = POLLHUP;	// we have already read eof. So hangup */ 
       else
@@ -831,10 +832,9 @@ static int async_message(uv_loop_t* loop) {
         watcher->cb(loop, watcher, flags);
 
       memset(&stream->aio_read, 0, sizeof(struct aiocb));
-#if 0
+
       if(QUEUE_EMPTY(&stream->write_queue) && stream->shutdown_req)
         uv__io_feed(loop, watcher);
-#endif
 
       if((stream->flags & UV_STREAM_READ_PARTIAL) && !(stream->flags & UV_CLOSING)) {
         uv__io_stop(loop, watcher, POLLIN);
@@ -853,6 +853,7 @@ static int async_message(uv_loop_t* loop) {
       watcher = (uv__io_t*)msgin[i].mm_ptr;
       stream = container_of(watcher, uv_stream_t, io_watcher);
 
+      //printf("JBAR AIO_MSG_ACCEPT fd=%d\n", uv__stream_fd(stream));
       if(stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
         flags = POLLHUP;	// we have already read eof. So hangup */ 
       else
@@ -882,9 +883,7 @@ static int async_message(uv_loop_t* loop) {
       else
         flags = POLLOUT;
 
-
       watcher->cb(loop, watcher, flags);
-      memset(&req->aio_write, 0, sizeof(struct aiocb));
       continue;
     }
     else if(msgin[i].mm_type == AIO_MSG_CONNECT)
@@ -894,6 +893,7 @@ static int async_message(uv_loop_t* loop) {
       uv__io_t *watcher = &req->handle->io_watcher;
       int fd = req->aio_connect.aio_fildes;
 
+      //printf("JBAR AIO_MSG_CONNECT fd=%d\n", uv__stream_fd(req->handle));
       if ((req->handle->flags & UV_CLOSING) && !(uv__io_active(&req->handle->io_watcher, POLLIN)))
         flags = POLLHUP;
       else
@@ -903,6 +903,10 @@ static int async_message(uv_loop_t* loop) {
         continue;
 
       watcher->cb(loop, watcher, flags);
+
+      if(QUEUE_EMPTY(&req->handle->write_queue) && req->handle->shutdown_req)
+        uv__io_feed(loop, watcher);
+
       continue;
     }
     else {
@@ -984,6 +988,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
         int rv, rc, rsn;
         ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
+        //printf("JBAR AIO_READ fd=%d rv=%d rc=%d\n", uv__stream_fd(stream), rv, rc);
         if (rv == -1 && rc == ECONNRESET) {
           stream->aio_read.aio_rv = 0;
           w->cb(loop, w, POLLIN | POLLHUP);
@@ -997,10 +1002,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         }
       }
 
-      if((w->pevents & POLLOUT) && !stream->connect_req) {
-        if(uv__asyncio_zos_write(stream) != 0)
-          timeout = 0;
-      }
     }
     else {
 
@@ -1207,30 +1208,37 @@ static int maybe_new_socket(uv_tcp_t* handle, int domain, int flags) {
   return 0;
 }
 
-int uv__asyncio_zos_write(uv_stream_t *stream) {
-  uv_write_t *req = NULL;
-  if(!QUEUE_EMPTY(&stream->write_queue)) {
-    QUEUE* q = QUEUE_HEAD(&stream->write_queue);
-    req = QUEUE_DATA(q, uv_write_t, queue);
-    if(req->aio_write.aio_fildes != 0)
-      req = NULL;
+int uv__zos_aio_write(uv_write_t *req, uv_stream_t *stream, char *buf, int len, int vector) {
+  int err;
+  int byteswritten;
+  int rv, rc, rsn;
+
+  if(!(stream->flags & UV_STREAM_BLOCKING))
+    if(vector)
+      return writev(uv__stream_fd(stream), buf, len);
+    else
+      return write(uv__stream_fd(stream), buf, len);
+    
+
+  err = aio_error(&req->aio_write);
+
+  if(err == EINPROGRESS) {
+    errno = EWOULDBLOCK;
+    return -1;
   }
-  else if(stream->flags & UV_STREAM_SHUTTING) {
-    uv__io_feed(stream->loop, &stream->io_watcher);
+    
+  if(err != 0) {
+    errno = err;
     return -1;
   }
 
-  if(!req)
-    return 0;
+  byteswritten = aio_return(&req->aio_write);
+  if(byteswritten) {
+    memset(&req->aio_write, 0, sizeof(struct aiocb));
+    return byteswritten;
+  }
 
-  int iovmax, iovcnt;
-  iovmax = uv__getiovmax();
-
-  /* Limit iov count to avoid EINVALs from writev() */
-  if (iovcnt > iovmax)
-    iovcnt = iovmax;
-
-  uv_buf_t* buf = &(req->bufs[req->write_index]);
+  memset(&req->aio_write, 0, sizeof(struct aiocb));
   req->aio_write.aio_fildes = uv__stream_fd(stream);
   req->aio_write.aio_notifytype = AIO_MSGQ;
   req->aio_write.aio_cflags |= AIO_OK2COMPIMD; 
@@ -1238,55 +1246,40 @@ int uv__asyncio_zos_write(uv_stream_t *stream) {
   req->aio_write_msg.mm_ptr = req;
   req->aio_write.aio_msgev_addr = &req->aio_write_msg;
   req->aio_write.aio_msgev_size = sizeof(req->aio_write_msg.mm_ptr);
-  if(req->nbufs > 1) {
+  if(vector) {
     /* vector */
     req->aio_write.aio_cmd = AIO_WRITEV;
-    req->aio_write.aio_buf = &(req->bufs[req->write_index]);
-    iovcnt = req->nbufs - req->write_index;
-    if (iovcnt > iovmax)
-      iovcnt = iovmax;
-    req->aio_write.aio_nbytes = iovcnt;
+    req->aio_write.aio_buf = buf;
+    req->aio_write.aio_nbytes = len;
   } else {
     req->aio_write.aio_cmd = AIO_WRITE;
-    req->aio_write.aio_buf = buf->base;
-    req->aio_write.aio_nbytes = buf->len;
+    req->aio_write.aio_buf = buf;
+    req->aio_write.aio_nbytes = len;
   }
   req->aio_write.aio_msgev_qid = stream->loop->msgqid;
 
   if(req->aio_write.aio_nbytes == 0) 
-    return 1;
+    return 0;
 
-  int rv, rc, rsn;
   ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-  if(rv == 0)                                                   
+  //printf("JBAR %s req=%p fd=%d rv=%d rc=%d buf=%p, len=%d\n", vector ? "AIO_WRITEV" : "AIO_WRITE", stream, uv__stream_fd(stream), rv, rc, req->aio_write.aio_buf, req->aio_write.aio_nbytes);
+  if(rv == 0) {                                                   
    /* Asynchronous write */                                    
-    uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
-  else if(rv == -1) {                                           
-   req->aio_write.aio_rv = rv;                                 
-   req->aio_write.aio_rc = rc;                                 
-  }                                                             
-  else {                                                        
-   /* Synchronous write or failure */                          
-   //uv__write(stream);                                          
-    uv__io_feed(stream->loop, &stream->io_watcher);             
-  }                                                             
-
-
-#if 0
-  if (rv == -1) {
-    req->aio_write.aio_rv = rv;
-    req->aio_write.aio_rc = rc;
-    stream->io_watcher.cb(stream->loop, &stream->io_watcher, POLLHUP);
+    errno = EWOULDBLOCK;
+    return -1;
   }
-  else if(rv == 0)
-    uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
-  else if(rv == 1) 
-    //if(uv__io_active(&stream->io_watcher, POLLOUT))
-      //stream->io_watcher.cb(stream->loop, &stream->io_watcher, POLLOUT);
-      uv__io_feed(stream->loop, &stream->io_watcher);
-#endif
+  else if(rv == -1) {                                           
+    memset(&req->aio_write, 0, sizeof(struct aiocb));
+    errno = rc;
+    return -1;
+  }                                                             
+  else if(rv == 1) {                                                        
+    /* Synchronous write or failure */                          
+    byteswritten = aio_return(&req->aio_write);
+    memset(&req->aio_write, 0, sizeof(struct aiocb));
+  }                                                             
 
-  return rv;
+  return byteswritten;
 }
 
 int uv__zos_aio_connect(uv_connect_t *req, uv_stream_t *stream, const struct sockaddr* addr, unsigned int addrlen) {
@@ -1305,18 +1298,19 @@ int uv__zos_aio_connect(uv_connect_t *req, uv_stream_t *stream, const struct soc
   if (req->aio_connect.aio_sockaddrptr != NULL) {
     memcpy(req->aio_connect.aio_sockaddrptr, addr, addrlen);
     ZASYNC(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
+    //printf("JBAR AIO_CONNECT fd=%d rv=%d rc=%d\n", uv__stream_fd(stream), rv, rc);
     if(rv < 0) {
       errno = rc;
       return -1;
     }
     else if(rv == 0){
-/* connect has not happened immediately
-   wait for notification */
+      /* connect has not happened immediately
+     wait for notification */
       errno = EINPROGRESS;
       return -1;
     }
     else if(rv == 1) {
-/* do nothing. Just as if connect() succeeded */
+      /* do nothing. Just as if connect() succeeded */
       return 0;
     }
   }
@@ -1336,6 +1330,7 @@ int uv__asyncio_zos_accept(uv_stream_t *stream) {
   stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
   int rv, rc, rsn;
   ZASYNC(sizeof(struct aiocb), &stream->aio_read, &rv, &rc, &rsn);
+  //printf("JBAR AIO_ACCEPT fd=%d rv=%d rc=%d\n", uv__stream_fd(stream), rv, rc);
   if(rv == -1) {                                           
    stream->aio_read.aio_rv = rv;                                 
    stream->aio_read.aio_rc = rc;                                 
@@ -1359,6 +1354,7 @@ int uv__asyncio_zos_cancel(uv_stream_t *stream) {
   int rv, rc, rsn;
   do {
     ZASYNC(sizeof(aio_cancel), &aio_cancel, &rv, &rc, &rsn);
+    //printf("JBAR AIO_CANCEL fd=%d rv=%d rc=%d\n", uv__stream_fd(stream), rv, rc);
   } while(aio_cancel.aio_rv == 1 || aio_cancel.aio_rv == 2);
 
   return 0;

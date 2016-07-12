@@ -265,7 +265,6 @@ int uv___stream_fd(const uv_stream_t* handle);
 #endif /* defined(__APPLE__) */
 
 #if defined(__MVS__)
-int uv__asyncio_zos_write(uv_stream_t *str);
 int uv__asyncio_zos_cancel(uv_stream_t *str);
 #endif
 
@@ -273,6 +272,17 @@ int uv__asyncio_zos_cancel(uv_stream_t *str);
 #define uv__async_connect(req, handle, addr, addrlen) \
         connect(uv__stream_fd(handle), addr, addrlen)
 #endif
+
+#ifndef uv__async_write
+#define uv__async_write(req, handle, ptr, len) \
+        write(uv__stream_fd(handle), ptr, len)
+#endif
+
+#ifndef uv__async_writev
+#define uv__async_writev(req, handle, ptr, len) \
+        writev(uv__stream_fd(handle), ptr, len)
+#endif
+
 
 #ifdef UV__O_NONBLOCK
 # define UV__F_NONBLOCK UV__O_NONBLOCK

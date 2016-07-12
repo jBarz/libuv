@@ -714,6 +714,7 @@ static void uv__drain(uv_stream_t* stream) {
     err = 0;
     if (shutdown(uv__stream_fd(stream), SHUT_WR))
       err = -errno;
+    //printf("JBAR SHUTDOWN fd=%d err=%d\n", uv__stream_fd(stream), err);
 
     if (err == 0)
       stream->flags |= UV_STREAM_SHUT;
@@ -859,29 +860,13 @@ start:
 #endif
   } else {
     do {
-#if defined (__MVS__)
-      if(req->handle->type == UV_TCP) {
-        errno = aio_error(&req->aio_write);
-        if(errno == 0)
-          n = aio_return(&req->aio_write);
-        else
-          n = -1;
-      }
-      else
-      {
-        if (iovcnt == 1) {
-          n = write(uv__stream_fd(stream), iov[0].iov_base, iov[0].iov_len);
-        } else {
-          n = writev(uv__stream_fd(stream), iov, iovcnt);
-        }
-      }
-#else
       if (iovcnt == 1) {
-        n = write(uv__stream_fd(stream), iov[0].iov_base, iov[0].iov_len);
+        n = uv__async_write(req, stream, iov[0].iov_base, iov[0].iov_len);
+        //printf("JBAR write at index=%d returned n=%d errno=%d\n", req->write_index, n, errno);
       } else {
-        n = writev(uv__stream_fd(stream), iov, iovcnt);
+        n = uv__async_writev(req, stream, iov, iovcnt);
+        //printf("JBAR writev at index=%d returned n=%d errno=%d\n", req->write_index, n, errno);
       }
-#endif
     }
 #if defined(__APPLE__)
     /*
@@ -908,7 +893,9 @@ start:
       return;
     } else if (stream->flags & UV_STREAM_BLOCKING) {
       /* If this is a blocking stream, try again. */
+#if !defined(__MVS__)
       goto start;
+#endif
     }
   } else {
     /* Successful write */
@@ -927,11 +914,6 @@ start:
 
         /* There is more to write. */
         if (stream->flags & UV_STREAM_BLOCKING) {
-#if defined(__MVS__)
-	  /* MVS socket is in blocking mode but actually asynchronously handled by OS*/
-          uv__io_stop(stream->loop, &stream->io_watcher, POLLOUT);
-          break;
-#endif
           /*
            * If we're blocking then we should not be enabling the write
            * watcher - instead we need to try again.
@@ -1050,6 +1032,7 @@ uv_handle_type uv__handle_type(int fd) {
 
 
 static void uv__stream_eof(uv_stream_t* stream, const uv_buf_t* buf) {
+  //printf("JBAR stream_eof fd=%d\n", uv__stream_fd(stream));
   stream->flags |= UV_STREAM_READ_EOF;
   uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
   if (!uv__io_active(&stream->io_watcher, POLLOUT))
@@ -1229,6 +1212,7 @@ static void uv__read(uv_stream_t* stream) {
 #else
         nread = read(uv__stream_fd(stream), buf.base, buf.len);
 #endif
+    //printf("JBAR read fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
       }
       while (nread < 0 && errno == EINTR);
     } else {
@@ -1566,9 +1550,6 @@ int uv_write2(uv_write_t* req,
     /* Still connecting, do nothing. */
   }
   else if(empty_queue) {
-#if defined(__MVS__)
-    if(!(stream->flags & UV_STREAM_BLOCKING) || uv__asyncio_zos_write(stream) != 0)
-#endif
     uv__write(stream);
   }
   else {

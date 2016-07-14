@@ -283,6 +283,11 @@ int uv__asyncio_zos_cancel(uv_stream_t *str);
         writev(uv__stream_fd(handle), ptr, len)
 #endif
 
+#ifndef uv__async_read
+#define uv__async_read(handle, ptr, len) \
+        read(uv__stream_fd(handle), ptr, len)
+#endif
+
 
 #ifdef UV__O_NONBLOCK
 # define UV__F_NONBLOCK UV__O_NONBLOCK

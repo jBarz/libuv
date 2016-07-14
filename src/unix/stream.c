@@ -962,6 +962,7 @@ start:
 
 
 static void uv__write_callbacks(uv_stream_t* stream) {
+//printf("JBAR write_callbacks\n");
   uv_write_t* req;
   QUEUE* q;
 
@@ -1167,23 +1168,7 @@ static void uv__read(uv_stream_t* stream) {
       && (count-- > 0)) {
     assert(stream->alloc_cb != NULL);
 
-#if defined (__MVS__)
-    if(stream->type == UV_TCP)
-    {
-      if(stream->aio_read.aio_buf == stream->bufsml) {
-        stream->alloc_cb((uv_handle_t*)stream, stream->aio_read.aio_nbytes, &buf);
-        memcpy(buf.base, stream->bufsml, stream->aio_read.aio_nbytes < buf.len ? stream->aio_read.aio_nbytes : buf.len);
-      }
-      else {
-        buf.base = stream->aio_read.aio_buf;
-        buf.len = stream->aio_read.aio_nbytes;
-      }
-    }
-    else
-      stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
-#else
     stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
-#endif
 
     if (buf.len == 0) {
       /* User indicates it can't or won't handle the read. */
@@ -1196,22 +1181,7 @@ static void uv__read(uv_stream_t* stream) {
 
     if (!is_ipc) {
       do {
-#if defined (__MVS__)
-	if(stream->type == UV_TCP)
-	{
-	  errno = aio_error(&stream->aio_read);
-	  if(errno == 0)
-	    nread = aio_return(&stream->aio_read);
-	  else
-	    nread = -1;
-	}
-	else
-	{
-	  nread = read(uv__stream_fd(stream), buf.base, buf.len);
-	}
-#else
-        nread = read(uv__stream_fd(stream), buf.base, buf.len);
-#endif
+        nread = uv__async_read(stream, buf.base, buf.len);
     //printf("JBAR read fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
       }
       while (nread < 0 && errno == EINTR);
@@ -1228,6 +1198,7 @@ static void uv__read(uv_stream_t* stream) {
 
       do {
         nread = uv__recvmsg(uv__stream_fd(stream), &msg, 0);
+    //printf("JBAR recvmsg fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
       }
       while (nread < 0 && errno == EINTR);
     }
@@ -1254,6 +1225,7 @@ static void uv__read(uv_stream_t* stream) {
       }
       return;
     } else if (nread == 0) {
+//printf("JBAR about to eof %d\n", __LINE__);
       uv__stream_eof(stream, &buf);
       return;
     } else {
@@ -1383,6 +1355,7 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       (stream->flags & UV_STREAM_READ_PARTIAL) &&
       !(stream->flags & UV_STREAM_READ_EOF)) {
     uv_buf_t buf = { NULL, 0 };
+//printf("JBAR about to eof %d\n", __LINE__);
     uv__stream_eof(stream, &buf);
   }
 

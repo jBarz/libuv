@@ -714,7 +714,7 @@ static void uv__drain(uv_stream_t* stream) {
     err = 0;
     if (shutdown(uv__stream_fd(stream), SHUT_WR))
       err = -errno;
-    //printf("JBAR SHUTDOWN fd=%d err=%d\n", uv__stream_fd(stream), err);
+    printf("JBAR SHUTDOWN fd=%d err=%d\n", uv__stream_fd(stream), err);
 
     if (err == 0)
       stream->flags |= UV_STREAM_SHUT;
@@ -862,10 +862,10 @@ start:
     do {
       if (iovcnt == 1) {
         n = uv__async_write(req, stream, iov[0].iov_base, iov[0].iov_len);
-        //printf("JBAR write at index=%d returned n=%d errno=%d\n", req->write_index, n, errno);
+        printf("JBAR write at index=%d returned n=%d errno=%d\n", req->write_index, n, errno);
       } else {
         n = uv__async_writev(req, stream, iov, iovcnt);
-        //printf("JBAR writev at index=%d returned n=%d errno=%d\n", req->write_index, n, errno);
+        printf("JBAR writev at index=%d returned n=%d errno=%d\n", req->write_index, n, errno);
       }
     }
 #if defined(__APPLE__)
@@ -962,7 +962,7 @@ start:
 
 
 static void uv__write_callbacks(uv_stream_t* stream) {
-//printf("JBAR write_callbacks\n");
+printf("JBAR write_callbacks\n");
   uv_write_t* req;
   QUEUE* q;
 
@@ -1033,7 +1033,7 @@ uv_handle_type uv__handle_type(int fd) {
 
 
 static void uv__stream_eof(uv_stream_t* stream, const uv_buf_t* buf) {
-  //printf("JBAR stream_eof fd=%d\n", uv__stream_fd(stream));
+  printf("JBAR stream_eof fd=%d\n", uv__stream_fd(stream));
   stream->flags |= UV_STREAM_READ_EOF;
   uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
   if (!uv__io_active(&stream->io_watcher, POLLOUT))
@@ -1182,7 +1182,7 @@ static void uv__read(uv_stream_t* stream) {
     if (!is_ipc) {
       do {
         nread = uv__async_read(stream, buf.base, buf.len);
-    //printf("JBAR read fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
+    printf("JBAR read fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
       }
       while (nread < 0 && errno == EINTR);
     } else {
@@ -1198,7 +1198,7 @@ static void uv__read(uv_stream_t* stream) {
 
       do {
         nread = uv__recvmsg(uv__stream_fd(stream), &msg, 0);
-    //printf("JBAR recvmsg fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
+    printf("JBAR recvmsg fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
       }
       while (nread < 0 && errno == EINTR);
     }
@@ -1225,7 +1225,7 @@ static void uv__read(uv_stream_t* stream) {
       }
       return;
     } else if (nread == 0) {
-//printf("JBAR about to eof %d\n", __LINE__);
+printf("JBAR about to eof %d\n", __LINE__);
       uv__stream_eof(stream, &buf);
       return;
     } else {
@@ -1355,7 +1355,7 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       (stream->flags & UV_STREAM_READ_PARTIAL) &&
       !(stream->flags & UV_STREAM_READ_EOF)) {
     uv_buf_t buf = { NULL, 0 };
-//printf("JBAR about to eof %d\n", __LINE__);
+printf("JBAR about to eof %d\n", __LINE__);
     uv__stream_eof(stream, &buf);
   }
 
@@ -1394,28 +1394,6 @@ static void uv__stream_connect(uv_stream_t* stream) {
     error = stream->delayed_error;
     stream->delayed_error = 0;
   } else {
-#if defined(__MVS__)
-    error = 0;
-    if(stream->type == UV_TCP) {
-      free(req->aio_connect.aio_sockaddrptr);
-      error = aio_error(&req->aio_connect);
-      if(error ==  0)
-        error = aio_return(&req->aio_connect);
-      else
-        error = -error;
-    }
-
-    if (!error) {
-    /* Normal situation: we need to get the socket error from the kernel. */
-      assert(uv__stream_fd(stream) >= 0);
-      assert(0 == getsockopt(uv__stream_fd(stream),
-               SOL_SOCKET,
-               SO_ERROR,
-               &error,
-               &errorsize));
-      error = -error;
-    }
-#else
     /* Normal situation: we need to get the socket error from the kernel. */
     assert(uv__stream_fd(stream) >= 0);
     getsockopt(uv__stream_fd(stream),
@@ -1424,7 +1402,6 @@ static void uv__stream_connect(uv_stream_t* stream) {
                &error,
                &errorsize);
     error = -error;
-#endif
   }
 
   if (error == -EINPROGRESS)

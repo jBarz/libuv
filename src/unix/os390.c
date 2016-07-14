@@ -285,6 +285,7 @@ int uv__platform_loop_init(uv_loop_t* loop) {
 
   loop->msgqid = msgget( IPC_PRIVATE, IPC_CREAT + S_IRUSR + S_IWUSR );
 
+  assert(loop->msgqid != -1);
   if (loop->msgqid == -1)
     return -errno;
 

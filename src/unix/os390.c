@@ -823,7 +823,6 @@ static int async_message(uv_loop_t* loop) {
       stream = container_of(watcher, uv_stream_t, io_watcher);
 
 
-      printf("JBAR AIO_MSG_READ fd=%d\n", uv__stream_fd(stream));
       if (stream->flags & UV_CLOSING || aio_error(&stream->aio_read) == ECANCELED)
         continue;
 
@@ -839,13 +838,6 @@ static int async_message(uv_loop_t* loop) {
       if(QUEUE_EMPTY(&stream->write_queue) && stream->shutdown_req)
         uv__io_feed(loop, watcher);
 
-      if((stream->flags & UV_STREAM_READ_PARTIAL) && !(stream->flags & UV_CLOSING)) {
-        uv__io_stop(loop, watcher, POLLIN);
-        uv__io_start(loop, watcher, POLLIN);
-
-      }
-
-      continue;
     }
     else if(msgin[i].mm_type == AIO_MSG_ACCEPT)
     {
@@ -856,18 +848,17 @@ static int async_message(uv_loop_t* loop) {
       watcher = (uv__io_t*)msgin[i].mm_ptr;
       stream = container_of(watcher, uv_stream_t, io_watcher);
 
-      printf("JBAR AIO_MSG_ACCEPT fd=%d\n", uv__stream_fd(stream));
       if(stream->flags & UV_STREAM_READ_EOF || stream->aio_read.aio_rc == ECANCELED)
         flags = POLLHUP;	// we have already read eof. So hangup */ 
       else
         flags = POLLIN;
 
-      if(!(stream->flags & UV_CLOSING))
-        watcher->cb(loop, watcher, flags);
+      if(stream->flags & UV_CLOSING)
+        continue;
 
-      if(stream->accepted_fd != -1)
-        memset(&stream->aio_read, 0, sizeof(struct aiocb));
-      continue;
+      stream->last_op_rv = 1;
+      watcher->cb(loop, watcher, flags);
+        
     }
     else if(msgin[i].mm_type == AIO_MSG_WRITE)
     {
@@ -877,7 +868,6 @@ static int async_message(uv_loop_t* loop) {
       int fd = req->aio_write.aio_fildes;
 
 
-      printf("JBAR AIO_MSG_WRITE fd=%d\n", uv__stream_fd(req->handle));
       if (req->handle->flags & UV_CLOSING ||  req->aio_write.aio_rc == ECANCELED)
         continue;
       
@@ -898,7 +888,6 @@ static int async_message(uv_loop_t* loop) {
       uv__io_t *watcher = &req->handle->io_watcher;
       int fd = req->aio_connect.aio_fildes;
 
-      printf("JBAR AIO_MSG_CONNECT fd=%d\n", uv__stream_fd(req->handle));
       if ((req->handle->flags & UV_CLOSING) && !(uv__io_active(&req->handle->io_watcher, POLLIN)))
         flags = POLLHUP;
       else
@@ -970,15 +959,43 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     uv_stream_t *stream= container_of(w, uv_stream_t, io_watcher);
     if(stream->flags & UV_STREAM_BLOCKING) {
 
-      if((w->pevents & POLLIN) && !(stream->flags & UV_STREAM_READING) && stream->aio_read.aio_fildes == 0) {
-        if(uv__asyncio_zos_accept(stream) != 0)
-          timeout = 0;
-      }
+      if(w->pevents & POLLIN && !stream->connect_req) {
 
-      if(w->pevents & POLLIN && stream->flags & UV_STREAM_READING  && stream->aio_read.aio_fildes == 0) {
-        if(uv__zos_aio_readpoll(stream) == -1) {
-          w->cb(loop, w, POLLIN | POLLHUP);
-          timeout = 0;
+        if(stream->type == UV_TCP && ((uv_tcp_t*)stream)->is_listening) {
+
+          /* Take care of last synchronous op first */
+          if(stream->last_op_rv == 1) {
+            w->cb(loop, w, POLLIN);
+            timeout = 0;
+          }
+          else if(stream->last_op_rv == -1) {
+            w->cb(loop, w, POLLIN | POLLHUP);
+            timeout = 0;
+          }
+
+          /* poll if neccessary */
+          if(w->pevents & POLLIN && !(w->events & POLLIN))
+            uv__zos_aio_acceptpoll(stream, 0);
+
+        }
+        else if(stream->flags & UV_STREAM_READING) {
+          /* Take care of last synchronous op first */
+          if(stream->last_op_rv == 1) {
+            w->cb(loop, w, POLLIN);
+            timeout = 0;
+          }
+          else if(stream->last_op_rv == -1) {
+            w->cb(loop, w, POLLIN | POLLHUP);
+            timeout = 0;
+          }
+
+          if(w->pevents & POLLIN && !(w->events & POLLIN))
+            uv__zos_aio_readpoll(stream, 0);
+
+          if(stream->last_op_rv == -1) {
+            w->cb(loop, w, POLLIN | POLLHUP);
+            timeout = 0;
+          }
         }
       }
 
@@ -1242,7 +1259,6 @@ int uv__zos_aio_write(uv_write_t *req, uv_stream_t *stream, char *buf, int len, 
     return 0;
 
   ZASYNC(sizeof(req->aio_write), &req->aio_write, &rv, &rc, &rsn);
-  printf("JBAR %s req=%p fd=%d rv=%d rc=%d buf=%p, len=%d\n", vector ? "AIO_WRITEV" : "AIO_WRITE", stream, uv__stream_fd(stream), rv, rc, req->aio_write.aio_buf, req->aio_write.aio_nbytes);
   if(rv == 0) {                                                   
    /* Asynchronous write */                                    
     errno = EWOULDBLOCK;
@@ -1278,7 +1294,6 @@ int uv__zos_aio_connect(uv_connect_t *req, uv_stream_t *stream, const struct soc
   if (req->aio_connect.aio_sockaddrptr != NULL) {
     memcpy(req->aio_connect.aio_sockaddrptr, addr, addrlen);
     ZASYNC(sizeof(req->aio_connect), &req->aio_connect, &rv, &rc, &rsn);
-    printf("JBAR AIO_CONNECT fd=%d rv=%d rc=%d\n", uv__stream_fd(stream), rv, rc);
     if(rv < 0) {
       errno = rc;
       return -1;
@@ -1298,32 +1313,52 @@ int uv__zos_aio_connect(uv_connect_t *req, uv_stream_t *stream, const struct soc
   return -1;
 }
 
-int uv__asyncio_zos_accept(uv_stream_t *stream) {
+static int uv__zos_aio_acceptpoll(uv_stream_t *stream, int compimd) {
+  int rv, rc, rsn;
+
+  memset(&stream->aio_read , 0, sizeof(struct aiocb));
   stream->aio_read.aio_fildes = stream->io_watcher.fd;
   stream->aio_read.aio_notifytype = AIO_MSGQ;
   stream->aio_read.aio_cmd = AIO_ACCEPT;
+  stream->aio_read.aio_cflags |= compimd ? AIO_OK2COMPIMD : 0; 
   stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
   stream->aio_read_msg.mm_type = AIO_MSG_ACCEPT;
   stream->aio_read_msg.mm_ptr = &stream->io_watcher;
-
   stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
   stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
-  int rv, rc, rsn;
   ZASYNC(sizeof(struct aiocb), &stream->aio_read, &rv, &rc, &rsn);
-  printf("JBAR AIO_ACCEPT fd=%d rv=%d rc=%d\n", uv__stream_fd(stream), rv, rc);
-  if(rv == -1) {                                           
-   stream->aio_read.aio_rv = rv;                                 
-   stream->aio_read.aio_rc = rc;                                 
-  }
 
+  stream->last_op_rv = rv;
+
+  errno = rc;
   return rv;
+}
+
+int uv__zos_aio_accept(uv_stream_t *stream) {
+  /* - Must be able to be called multiple times */
+
+  int err;
+
+  if(!(stream->flags & UV_STREAM_BLOCKING))
+    return uv__accept(uv__stream_fd(stream));
+
+  if(stream->last_op_rv == 0)
+    err = -EWOULDBLOCK;
+  else if(stream->aio_read.aio_rc == EINPROGRESS)
+    err = -EWOULDBLOCK;
+  else if(stream->aio_read.aio_rv == -1)
+    err = -stream->aio_read.aio_rc;
+  else
+    err = stream->aio_read.aio_rv;
+
+  uv__zos_aio_acceptpoll(stream, 1);
+  return err;
 }
 
 int uv__zos_aio_read(uv_stream_t *stream, char **buf, unsigned long *len) {
   int err;
 
   if(!(stream->flags & UV_STREAM_BLOCKING)){
-  printf("JBAR conventional read fd=%d\n", (uv__stream_fd(stream)));
     return read(uv__stream_fd(stream), *buf, *len);
   }
 
@@ -1340,48 +1375,59 @@ int uv__zos_aio_read(uv_stream_t *stream, char **buf, unsigned long *len) {
 
   err = aio_return(&stream->aio_read);
 
-  if(stream->aio_read.aio_buf == stream->bufsml) {
+  if(stream->bufsml.len > 0) {
     uv_buf_t newbuf;
-    stream->alloc_cb((uv_handle_t*)stream, stream->aio_read.aio_nbytes, &newbuf);
-    memcpy(newbuf.base, stream->bufsml, stream->aio_read.aio_nbytes < newbuf.len ? stream->aio_read.aio_nbytes : newbuf.len);
+    stream->alloc_cb((uv_handle_t*)stream, err, &newbuf);
+
+    /* if this assert starts failing, we need to account for the user asking
+       for less bytes than what we read into bufsml 
+       May be temporarily store it somewhere and return it in the next call? */
+    assert(newbuf.len >= err);
+
+    memcpy(newbuf.base, stream->bufsml.base, err);
     *buf = newbuf.base;
     *len = newbuf.len;
+    free(stream->bufsml.base);
+    stream->bufsml.len = 0;
   }
   else {
     *buf = stream->aio_read.aio_buf;
     *len = 64 * 1024;
   }
 
-  memset(&stream->aio_read, 0, sizeof(struct aiocb));
+  uv__zos_aio_readpoll(stream, err < *len ? 0 : 1);
   return err;
 }
 
-static int uv__zos_aio_readpoll(uv_stream_t *stream) {
+static int uv__zos_aio_readpoll(uv_stream_t *stream, int compimd) {
   int rv, rc, rsn;
 
+  memset(&stream->aio_read, 0, sizeof(struct aiocb));
   stream->aio_read.aio_fildes = uv__stream_fd(stream);
   stream->aio_read.aio_notifytype = AIO_MSGQ;
+  stream->aio_read.aio_cflags |= compimd ? AIO_OK2COMPIMD : 0; 
   stream->aio_read.aio_cmd = AIO_READ;
   stream->aio_read.aio_msgev_qid = stream->loop->msgqid;
   stream->aio_read_msg.mm_type = AIO_MSG_READ;
   stream->aio_read_msg.mm_ptr = &stream->io_watcher;
   stream->aio_read.aio_msgev_addr = &stream->aio_read_msg;
   stream->aio_read.aio_msgev_size = sizeof(stream->aio_read_msg.mm_ptr);
-  if(stream->flags & UV_STREAM_READ_PARTIAL) {
+  if(stream->bufsml.len > 0) {
+    stream->aio_read.aio_buf = stream->bufsml.base;
+    stream->aio_read.aio_offset = 0;
+    stream->aio_read.aio_nbytes = stream->bufsml.len;
+  }
+  else {
     uv_buf_t buf;
     stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
     stream->aio_read.aio_buf = buf.base;
     stream->aio_read.aio_offset = 0;
     stream->aio_read.aio_nbytes = buf.len;
   }
-  else {
-    stream->aio_read.aio_buf = stream->bufsml;
-    stream->aio_read.aio_offset = 0;
-    stream->aio_read.aio_nbytes = sizeof(stream->bufsml);
-  }
 
   ZASYNC(sizeof(stream->aio_read), &stream->aio_read, &rv, &rc, &rsn);
-  printf("JBAR AIO_READ fd=%d rv=%d rc=%d\n", uv__stream_fd(stream), rv, rc);
+
+  stream->last_op_rv = rv;
 
   errno = rc;
   return rv;
@@ -1402,7 +1448,6 @@ int uv__asyncio_zos_cancel(uv_stream_t *stream) {
   int rv, rc, rsn;
   do {
     ZASYNC(sizeof(aio_cancel), &aio_cancel, &rv, &rc, &rsn);
-    printf("JBAR AIO_CANCEL fd=%d rv=%d rc=%d\n", uv__stream_fd(stream), rv, rc);
   } while(aio_cancel.aio_rv == 1 || aio_cancel.aio_rv == 2);
 
   return 0;

@@ -41,6 +41,8 @@
         uv__zos_aio_write(req, stream, buf, len, 1)
 #define uv__async_read(stream, buf, len) \
         uv__zos_aio_read(stream, &buf, &len)
+#define uv__async_accept(stream) \
+        uv__zos_aio_accept(stream)
 
 struct uv__epoll_event {
   uint32_t events;
@@ -57,5 +59,7 @@ int uv__zos_aio_write(uv_write_t *req, uv_stream_t *str,
 
 int uv__zos_aio_read(uv_stream_t *str,
                      char **buf, unsigned long *len);
+
+int uv__zos_aio_accept(uv_stream_t *stream);
 
 #endif /* UV_OS390_SYSCALL_H_ */

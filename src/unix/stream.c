@@ -102,6 +102,9 @@ void uv__stream_init(uv_loop_t* loop,
   stream->select = NULL;
 #elif defined(__MVS__)
   memset(&stream->aio_read, 0, sizeof(struct aiocb));
+  stream->last_op_rv = 0;
+  stream->bufsml.base = (char*)malloc(64);
+  stream->bufsml.len = 64;
 #endif /* defined(__APPLE_) */
 
   uv__io_init(&stream->io_watcher, uv__stream_io, -1);
@@ -466,6 +469,12 @@ void uv__stream_destroy(uv_stream_t* stream) {
     stream->shutdown_req = NULL;
   }
 
+#if defined(__MVS__)
+  if(stream->bufsml.len > 0) {
+    free(stream->bufsml.base);
+    stream->bufsml.len = 0;
+  }
+#endif
   assert(stream->write_queue_size == 0);
 }
 
@@ -535,23 +544,7 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       return;
 #endif /* defined(UV_HAVE_KQUEUE) */
 
-#if defined(__MVS__)
-    if(stream->type == UV_TCP) {
-    /* capture error state of the prior aio accept */
-      int aio_accept_err=-1;
-      aio_accept_err = aio_error(&stream->aio_read);
-      if(aio_accept_err ==  0)
-        aio_accept_err = aio_return(&stream->aio_read);
-      else
-        aio_accept_err = -aio_accept_err;
- 
-      err = aio_accept_err;
-    }
-    else
-      err = uv__accept(uv__stream_fd(stream));
-#else
-    err = uv__accept(uv__stream_fd(stream));
-#endif
+    err = uv__async_accept(stream);
     if (err < 0) {
       if (err == -EAGAIN || err == -EWOULDBLOCK || err == -EINPROGRESS)
         return;  /* Not an error. */
@@ -579,10 +572,6 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       return;
     }
 
-#if defined(__MVS__)
-    if (stream->flags & UV_STREAM_BLOCKING && uv__asyncio_zos_accept(stream) == 0)
-      return;
-#endif
 
     if (stream->type == UV_TCP && (stream->flags & UV_TCP_SINGLE_ACCEPT)) {
       /* Give other processes a chance to accept connections. */
@@ -714,7 +703,6 @@ static void uv__drain(uv_stream_t* stream) {
     err = 0;
     if (shutdown(uv__stream_fd(stream), SHUT_WR))
       err = -errno;
-    printf("JBAR SHUTDOWN fd=%d err=%d\n", uv__stream_fd(stream), err);
 
     if (err == 0)
       stream->flags |= UV_STREAM_SHUT;
@@ -862,10 +850,8 @@ start:
     do {
       if (iovcnt == 1) {
         n = uv__async_write(req, stream, iov[0].iov_base, iov[0].iov_len);
-        printf("JBAR write at index=%d returned n=%d errno=%d\n", req->write_index, n, errno);
       } else {
         n = uv__async_writev(req, stream, iov, iovcnt);
-        printf("JBAR writev at index=%d returned n=%d errno=%d\n", req->write_index, n, errno);
       }
     }
 #if defined(__APPLE__)
@@ -962,7 +948,6 @@ start:
 
 
 static void uv__write_callbacks(uv_stream_t* stream) {
-printf("JBAR write_callbacks\n");
   uv_write_t* req;
   QUEUE* q;
 
@@ -1033,7 +1018,6 @@ uv_handle_type uv__handle_type(int fd) {
 
 
 static void uv__stream_eof(uv_stream_t* stream, const uv_buf_t* buf) {
-  printf("JBAR stream_eof fd=%d\n", uv__stream_fd(stream));
   stream->flags |= UV_STREAM_READ_EOF;
   uv__io_stop(stream->loop, &stream->io_watcher, POLLIN);
   if (!uv__io_active(&stream->io_watcher, POLLOUT))
@@ -1182,7 +1166,6 @@ static void uv__read(uv_stream_t* stream) {
     if (!is_ipc) {
       do {
         nread = uv__async_read(stream, buf.base, buf.len);
-    printf("JBAR read fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
       }
       while (nread < 0 && errno == EINTR);
     } else {
@@ -1198,7 +1181,6 @@ static void uv__read(uv_stream_t* stream) {
 
       do {
         nread = uv__recvmsg(uv__stream_fd(stream), &msg, 0);
-    printf("JBAR recvmsg fd=%d returned nread=%d errno=%d\n", uv__stream_fd(stream), nread, errno);
       }
       while (nread < 0 && errno == EINTR);
     }
@@ -1225,7 +1207,6 @@ static void uv__read(uv_stream_t* stream) {
       }
       return;
     } else if (nread == 0) {
-printf("JBAR about to eof %d\n", __LINE__);
       uv__stream_eof(stream, &buf);
       return;
     } else {
@@ -1275,10 +1256,6 @@ printf("JBAR about to eof %d\n", __LINE__);
         return;
       }
 
-      if (stream->flags & UV_STREAM_BLOCKING) {
-        stream->flags |= UV_STREAM_READ_PARTIAL;
-        return;
-      }
     }
   }
 }
@@ -1355,7 +1332,6 @@ static void uv__stream_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       (stream->flags & UV_STREAM_READ_PARTIAL) &&
       !(stream->flags & UV_STREAM_READ_EOF)) {
     uv_buf_t buf = { NULL, 0 };
-printf("JBAR about to eof %d\n", __LINE__);
     uv__stream_eof(stream, &buf);
   }
 

@@ -292,6 +292,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   ** Hence the manual binding to an arbitrary port is required to be done manually */
 
   errno = 0;
+  tcp->is_listening = 1;
   if (tcp->is_bound != 1)
   {
     struct sockaddr_in saddr;

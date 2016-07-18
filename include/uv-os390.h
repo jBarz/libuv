@@ -46,7 +46,8 @@ struct AioMsg {         /* The I/O Complete Message          */
   int msgqid;
 
 #define UV_TCP_PRIVATE_PLATFORM_FIELDS			\
-  int is_bound;
+  int is_bound;                             \
+  int is_listening;
 
 #define UV_PLATFORM_WRITE_FIELDS	      		\
   struct aiocb aio_write;		            		\
@@ -57,7 +58,8 @@ struct AioMsg {         /* The I/O Complete Message          */
   struct aiocb aio_cancel;		           		\
   struct AioMsg aio_read_msg;				        \
   struct AioMsg aio_cancel_msg;			        \
-  char bufsml[64];
+  int last_op_rv;                           \
+  uv_buf_t bufsml;
 
 #define UV_PLATFORM_CONNECT_FIELDS		    	\
   struct aiocb aio_connect;				          \

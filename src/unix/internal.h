@@ -288,6 +288,10 @@ int uv__asyncio_zos_cancel(uv_stream_t *str);
         read(uv__stream_fd(handle), ptr, len)
 #endif
 
+#ifndef uv__async_accept
+#define uv__async_accept(handle) \
+        uv__accept(uv__stream_fd(handle))
+#endif
 
 #ifdef UV__O_NONBLOCK
 # define UV__F_NONBLOCK UV__O_NONBLOCK

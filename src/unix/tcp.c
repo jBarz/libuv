@@ -134,6 +134,7 @@ int uv__tcp_bind(uv_tcp_t* tcp,
   }
   tcp->delayed_error = -errno;
 
+  tcp->flags |= UV_HANDLE_BOUND; 
   if (addr->sa_family == AF_INET6)
     tcp->flags |= UV_HANDLE_IPV6;
 
@@ -260,6 +261,7 @@ int uv_tcp_getpeername(const uv_tcp_t* handle,
 int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   static int single_accept = -1;
   int err;
+  struct sockaddr_in saddr;
 
   if (tcp->delayed_error)
     return tcp->delayed_error;
@@ -276,10 +278,27 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   if (err)
     return err;
 
+#ifdef __MVS__
+  /* on zOS the listen call does not bind automatically 
+     if the socket is unbound. Hence the manual binding to 
+     an arbitrary port is required to be done manually 
+  */
+
+  if (!(tcp->flags & UV_HANDLE_BOUND))
+  {
+    memset(&saddr, 0, sizeof(saddr));
+    saddr.sin_family = AF_INET;
+    if(bind(tcp->io_watcher.fd, (struct sockaddr*)&saddr, sizeof(saddr)))
+      return -errno;
+    tcp->flags |= UV_HANDLE_BOUND; 
+  }
+#endif
+
   if (listen(tcp->io_watcher.fd, backlog))
     return -errno;
 
   tcp->connection_cb = cb;
+  tcp->flags |= UV_HANDLE_BOUND; 
 
   /* Start listening for connections. */
   tcp->io_watcher.cb = uv__server_io;

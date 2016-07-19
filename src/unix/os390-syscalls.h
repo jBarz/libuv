@@ -34,6 +34,11 @@
 #define UV__EPOLL_CTL_MOD         3
 #define UV__EPOLL_CTL_ADD_MSGQ    4
 
+int alphasort(const void *a, const void *b);
+int scandir(const char *dirp, struct dirent ***namelist,
+            int (*filter)(const struct dirent *),
+            int (*compar)(const struct dirent **, const struct dirent **));
+
 #define uv__async_connect uv__zos_aio_connect
 #define uv__async_write(req, stream, buf, len) \
         uv__zos_aio_write(req, stream, buf, len, 0)

@@ -612,7 +612,7 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
         goto done;
       }
 #if defined(__MVS__)
-      ((uv_tcp_t*)client)->is_bound = 1;
+      ((uv_tcp_t*)client)->flags |= UV_HANDLE_BOUND;
 #endif
       break;
 

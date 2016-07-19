@@ -390,9 +390,9 @@ libuv_la_CFLAGS += -D_UNIX03_THREADS \
                    -qXPLINK \
                    -qFLOAT=IEEE
 libuv_la_LDFLAGS += -qXPLINK
-libuv_la_SOURCES += src/unix/os390.c \
+libuv_la_SOURCES += src/unix/os390-syscalls.c \
+                    src/unix/os390.c \
                     src/unix/os390-epoll.c \
-                    src/unix/os390-syscalls.c \
                     src/unix/pthread-fixes.c \
                     src/unix/pthread-barrier.c
 endif

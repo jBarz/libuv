@@ -1251,11 +1251,10 @@ static void uv__read(uv_stream_t* stream) {
       stream->read_cb(stream, nread, &buf);
 
       /* Return if we didn't fill the buffer, there is no more data to read. */
-      if (nread < buflen ) {
+      if (nread < buflen) {
         stream->flags |= UV_STREAM_READ_PARTIAL;
         return;
       }
-
     }
   }
 }
@@ -1475,7 +1474,7 @@ int uv_write2(uv_write_t* req,
   if (stream->connect_req) {
     /* Still connecting, do nothing. */
   }
-  else if(empty_queue) {
+  else if (empty_queue) {
     uv__write(stream);
   }
   else {

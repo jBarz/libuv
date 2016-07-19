@@ -101,10 +101,11 @@ static void recv_cb(uv_stream_t* handle,
       recv = &ctx.recv2;
     }
 
-    /* Depending on the OS, the final recv_cb can be called after the child
-     * process has terminated which can result in nread being UV_EOF instead of
-     * the number of bytes read.  Since the other end of the pipe has closed this
-     * UV_EOF is an acceptable value. */
+    /* Depending on the OS, the final recv_cb can be called after
+     * the child process has terminated which can result in nread
+     * being UV_EOF instead of the number of bytes read.  Since
+     * the other end of the pipe has closed this UV_EOF is an
+     * acceptable value. */
     if (nread == UV_EOF) {
       /* UV_EOF is only acceptable for the final recv_cb call */
       ASSERT(recv_cb_count == 2);
@@ -126,7 +127,7 @@ static void recv_cb(uv_stream_t* handle,
       r = uv_accept(handle, &recv->stream);
       ASSERT(r == 0);
     }
-  } while(uv_pipe_pending_count(pipe));
+  } while (uv_pipe_pending_count(pipe) > 0);
 
   /* Close after two writes received */
   if (recv_cb_count == 2) {
@@ -295,7 +296,6 @@ static void read_cb(uv_stream_t* handle,
     return;
   }
 
-  //for (int i = 0; i < uv_pipe_pending_count(pipe); ++i) {
   pipe = (uv_pipe_t*) handle;
   do {
     if (++read_cb_count == 2) {
@@ -332,7 +332,7 @@ static void read_cb(uv_stream_t* handle,
                   &recv->stream,
                   write2_cb);
     ASSERT(r == 0);
-  } while(uv_pipe_pending_count(pipe));
+  } while (uv_pipe_pending_count(pipe) > 0);
 }
 
 static void send_recv_start() {

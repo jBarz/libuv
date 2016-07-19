@@ -112,7 +112,6 @@ static void read_cb(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
                              (const struct sockaddr*) &addr,
                              connect_cb));
   ASSERT(0 == uv_read_start((uv_stream_t*) &tcp_check, alloc_cb, read_cb));
-
 }
 
 static void connection_cb(uv_stream_t* server, int status) {

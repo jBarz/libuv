@@ -95,9 +95,7 @@ TEST_DECLARE   (tcp_create_early_bad_domain)
 TEST_DECLARE   (tcp_create_early_accept)
 #ifndef _WIN32
 TEST_DECLARE   (tcp_close_accept)
-#ifndef __MVS__
 TEST_DECLARE   (tcp_oob)
-#endif
 #endif
 TEST_DECLARE   (tcp_flags)
 TEST_DECLARE   (tcp_write_to_half_open_connection)
@@ -470,9 +468,7 @@ TASK_LIST_START
   TEST_ENTRY  (tcp_create_early_accept)
 #ifndef _WIN32
   TEST_ENTRY  (tcp_close_accept)
-#ifndef __MVS__
   TEST_ENTRY  (tcp_oob)
-#endif
 #endif
   TEST_ENTRY  (tcp_flags)
   TEST_ENTRY  (tcp_write_to_half_open_connection)

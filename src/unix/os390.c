@@ -23,6 +23,54 @@
 #include "os390-syscalls.h"
 #include <sys/time.h>
 
+#define CVT_PTR           0x10
+#define CSD_OFFSET        0x294
+
+/* 
+    Long-term average CPU service used by this logical partition,
+    in millions of service units per hour. If this value is above
+    the partition's defined capacity, the partition will be capped.
+    It is calculated using the physical CPU adjustment factor
+    (RCTPCPUA) so it may not match other measures of service which
+    are based on the logical CPU adjustment factor. It is available
+    if the hardware supports LPAR cluster.
+*/
+#define RCTLACS_OFFSET    0xC4
+
+/* 32-bit count of alive CPUs. This includes both CPs and IFAs */
+#define CSD_NUMBER_ONLINE_CPUS        0xD4
+
+/* ADDRESS OF SYSTEM RESOURCES MANAGER (SRM) CONTROL TABLE */
+#define CVTOPCTP_OFFSET   0x25C
+
+/* Address of the RCT table */
+#define RMCTRCT_OFFSET    0xE4
+
+/* "V(IARMRRCE)" - ADDRESS OF THE RSM CONTROL AND ENUMERATION AREA. */
+#define CVTRCEP_OFFSET    0x490
+
+/* 
+    NUMBER OF FRAMES CURRENTLY AVAILABLE TO SYSTEM. 
+    EXCLUDED ARE FRAMES BACKING PERM STORAGE, FRAMES OFFLINE, AND BAD FRAMES
+*/
+#define RCEPOOL_OFFSET    0x004
+
+/* TOTAL NUMBER OF FRAMES CURRENTLY ON ALL AVAILABLE FRAME QUEUES. */
+#define RCEAFC_OFFSET     0x088
+
+typedef unsigned data_area_ptr_assign_type;
+
+typedef union {
+  struct {
+#if defined(_LP64)
+    data_area_ptr_assign_type lower;
+#endif
+    data_area_ptr_assign_type assign;
+  };
+  char* deref;
+} data_area_ptr; 
+
+
 int uv__platform_loop_init(uv_loop_t* loop) {
   int fd;
 
@@ -69,6 +117,24 @@ int uv_exepath(char* buffer, size_t* size) {
   buffer[*size] = '\0';
 
   return 0;
+}
+
+uint64_t uv_get_free_memory(void) {
+  data_area_ptr cvt = {0};
+  data_area_ptr rcep = {0};
+  cvt.assign = *(data_area_ptr_assign_type*)(CVT_PTR);
+  rcep.assign = *(data_area_ptr_assign_type*)(cvt.deref + CVTRCEP_OFFSET);
+  uint64_t freeram = *((uint64_t*)(rcep.deref + RCEAFC_OFFSET)) * 4;
+  return freeram;
+}
+
+uint64_t uv_get_total_memory(void) {
+  data_area_ptr cvt = {0};
+  data_area_ptr rcep = {0};
+  cvt.assign = *(data_area_ptr_assign_type*)(CVT_PTR);
+  rcep.assign = *(data_area_ptr_assign_type*)(cvt.deref + CVTRCEP_OFFSET);
+  uint64_t totalram = *((uint64_t*)(rcep.deref + RCEPOOL_OFFSET)) * 4;
+  return totalram;
 }
 
 void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {

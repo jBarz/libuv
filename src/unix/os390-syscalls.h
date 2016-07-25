@@ -61,10 +61,34 @@ struct _epoll_list{
   pthread_mutex_t lock;
 };
 
+#define uv__async_connect uv__zos_aio_connect
+#define uv__async_write(req, stream, buf, len) \
+        uv__zos_aio_write(req, stream, buf, len, 0)
+#define uv__async_writev(req, stream, buf, len) \
+        uv__zos_aio_write(req, stream, buf, len, 1)
+#define uv__async_read(stream, buf, len) \
+        uv__zos_aio_read(stream, &buf, &len)
+#define uv__async_accept(stream) \
+        uv__zos_aio_accept(stream)
+
 /* epoll api */
 int epoll_create1(int flags);
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
 int epoll_wait(int epfd, struct epoll_event *events, int maxevents, int timeout);
 int epoll_pwait(int epfd, struct epoll_event *events, int maxevents, int timeout, int sigmask);
 int epoll_file_close(int fd);
+
+/* aio interface */
+int uv__zos_aio_connect(uv_connect_t *req, uv_stream_t *str,
+                         const struct sockaddr* addr,
+                         unsigned int addrlen);
+
+int uv__zos_aio_write(uv_write_t *req, uv_stream_t *str,
+                         char *buf, int len, int vec);
+
+int uv__zos_aio_read(uv_stream_t *str,
+                     char **buf, unsigned long *len);
+
+int uv__zos_aio_accept(uv_stream_t *stream);
+
 #endif /* UV_OS390_SYSCALL_H_ */

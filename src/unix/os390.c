@@ -20,9 +20,10 @@
  */
 
 #include "internal.h"
+#include "os390-syscalls.h"
 #include <sys/ioctl.h>
 #include <net/if.h>
-#include "os390-syscalls.h"
+#include <utmpx.h>
 #include <sys/time.h>
 #include "//'SYS1.SAMPLIB(CSRSIC)'"
 
@@ -138,6 +139,19 @@ uint64_t uv_get_total_memory(void) {
   rcep.assign = *(data_area_ptr_assign_type*)(cvt.deref + CVTRCEP_OFFSET);
   uint64_t totalram = *((uint64_t*)(rcep.deref + RCEPOOL_OFFSET)) * 4;
   return totalram;
+}
+
+int uv_uptime(double* uptime) {
+  struct utmpx u ;
+  struct utmpx *v;
+
+  u.ut_type = BOOT_TIME;
+  v = getutxid(&u);
+  if (v==NULL)
+    return -1;
+  time64_t t;
+  *uptime = difftime64( time64(&t), v->ut_tv.tv_sec);
+  return 0;
 }
 
 int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {

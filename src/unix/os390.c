@@ -20,6 +20,16 @@
  */
 
 #include "internal.h"
+#include <sys/time.h>
+
+uint64_t uv__hrtime(uv_clocktype_t type) {
+  struct timeval t;
+  gettimeofday(&t, NULL);
+  uint64_t s = t.tv_sec ;
+  s *= 1000000000;
+  s += (t.tv_usec*1000);
+  return s;
+}
 
 int uv__io_check_fd(uv_loop_t* loop, int fd) {
   struct pollfd p[1];

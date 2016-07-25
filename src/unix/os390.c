@@ -50,3 +50,24 @@ int uv__io_check_fd(uv_loop_t* loop, int fd) {
 
   return 0;
 }
+
+void uv__fs_event_close(uv_fs_event_t* handle) {
+  UNREACHABLE();
+}
+
+int uv_fs_event_init(uv_loop_t* loop, uv_fs_event_t* handle) {
+  uv__handle_init(loop, (uv_handle_t*)handle, UV_FS_EVENT);
+  return 0;
+}
+
+int uv_fs_event_start(uv_fs_event_t* handle,
+    uv_fs_event_cb cb,
+    const char* filename,
+    unsigned int flags) {
+  return -ENOSYS;
+}
+
+int uv_fs_event_stop(uv_fs_event_t* handle) {
+  return -ENOSYS;
+}
+

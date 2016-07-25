@@ -351,6 +351,12 @@ update_timeout:
   }
 }
 
+void uv_loadavg(double avg[3]) {
+  avg[0] = 0;
+  avg[1] = 0;
+  avg[2] = 0;
+}
+
 char** uv_setup_args(int argc, char** argv) {
   return argv;
 }

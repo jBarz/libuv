@@ -31,6 +31,26 @@ uint64_t uv__hrtime(uv_clocktype_t type) {
   return s;
 }
 
+int uv_exepath(char* buffer, size_t* size) {
+  size_t len;
+  char var[] = "EXE_PATH";
+
+  if (buffer == NULL || size == NULL || *size == 0)
+    return -EINVAL;
+
+  char *exe_path=__getenv(var);
+  if (exe_path == NULL)
+    return -EINVAL;
+
+  len = strlen(exe_path);
+  *size = len > *size - 1 ? *size - 1 : len ;
+  memcpy(buffer, exe_path, *size);
+  buffer[*size] = '\0';
+
+  return 0;
+}
+
+
 int uv__io_check_fd(uv_loop_t* loop, int fd) {
   struct pollfd p[1];
   int rv;

@@ -691,3 +691,13 @@ void uv_loadavg(double avg[3]) {
 char** uv_setup_args(int argc, char** argv) {
   return argv;
 }
+
+int uv_set_process_title(const char* title) {
+  return 0;
+}
+
+int uv_get_process_title(char* buffer, size_t size) {
+  if (size > 0)
+    buffer[0] = '\0';
+  return 0;
+}

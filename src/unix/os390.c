@@ -24,6 +24,7 @@
 #include <net/if.h>
 #include "os390-syscalls.h"
 #include <sys/time.h>
+#include "//'SYS1.SAMPLIB(CSRSIC)'"
 
 #define CVT_PTR           0x10
 #define CSD_OFFSET        0x294
@@ -137,6 +138,60 @@ uint64_t uv_get_total_memory(void) {
   rcep.assign = *(data_area_ptr_assign_type*)(cvt.deref + CVTRCEP_OFFSET);
   uint64_t totalram = *((uint64_t*)(rcep.deref + RCEPOOL_OFFSET)) * 4;
   return totalram;
+}
+
+int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
+  uv_cpu_info_t* cpu_info;
+  int result;
+  int idx;
+  siv1v2 info;
+  data_area_ptr cvt = {0};
+  data_area_ptr csd = {0};
+  data_area_ptr rmctrct = {0};
+  data_area_ptr cvtopctp = {0};
+  int cpu_usage_avg;
+
+  cvt.assign = *(data_area_ptr_assign_type*)(CVT_PTR);
+
+  csd.assign = *((data_area_ptr_assign_type *) (cvt.deref + CSD_OFFSET));
+  cvtopctp.assign = *((data_area_ptr_assign_type *) (cvt.deref + CVTOPCTP_OFFSET));
+  rmctrct.assign = *((data_area_ptr_assign_type *) (cvtopctp.deref + RMCTRCT_OFFSET));
+
+  *count = *((int*) (csd.deref + CSD_NUMBER_ONLINE_CPUS));
+  cpu_usage_avg = *((unsigned short int*) (rmctrct.deref + RCTLACS_OFFSET));
+
+  *cpu_infos = (uv_cpu_info_t*) uv__malloc(*count * sizeof(uv_cpu_info_t));
+  if (!*cpu_infos)
+    return -ENOMEM;
+
+  cpu_info = *cpu_infos;
+  idx = 0;
+  while (idx < *count) {
+
+    cpu_info->speed = *(int*)(info.siv1v2si22v1.si22v1cpucapability);
+    cpu_info->model = malloc(17);
+    memset(cpu_info->model, '\0', 17);
+    memcpy(cpu_info->model, info.siv1v2si11v1.si11v1cpcmodel, 16);
+    cpu_info->cpu_times.user = cpu_usage_avg;
+    cpu_info->cpu_times.sys = 0;
+    cpu_info->cpu_times.idle = 0;
+    cpu_info->cpu_times.irq = 0;
+    cpu_info->cpu_times.nice = 0;
+    cpu_info++;
+    idx++;
+  }
+
+  return 0;
+}
+
+void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
+  int i;
+
+  for (i = 0; i < count; ++i) {
+    uv__free(cpu_infos[i].model);
+  }
+
+  uv__free(cpu_infos);
 }
 
 static int uv__interface_addresses_v6(uv_interface_address_t** addresses,

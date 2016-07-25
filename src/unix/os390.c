@@ -25,6 +25,7 @@
 #include <net/if.h>
 #include <utmpx.h>
 #include <sys/time.h>
+#include <sys/ps.h>
 #include "//'SYS1.SAMPLIB(CSRSIC)'"
 
 #define CVT_PTR           0x10
@@ -139,6 +140,17 @@ uint64_t uv_get_total_memory(void) {
   rcep.assign = *(data_area_ptr_assign_type*)(cvt.deref + CVTRCEP_OFFSET);
   uint64_t totalram = *((uint64_t*)(rcep.deref + RCEPOOL_OFFSET)) * 4;
   return totalram;
+}
+
+int uv_resident_set_memory(size_t* rss) {
+  W_PSPROC buf;
+
+  memset(&buf, 0x00, sizeof(buf));
+  if(w_getpsent(0, &buf, sizeof(W_PSPROC)) == -1)
+    return -EINVAL;
+
+  *rss = buf.ps_size;
+  return 0;
 }
 
 int uv_uptime(double* uptime) {

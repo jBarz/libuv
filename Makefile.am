@@ -296,6 +296,7 @@ test_run_tests_CFLAGS += -D_UNIX03_THREADS \
                          -D_LARGE_TIME_API \
                          -D_OPEN_SYS_FILE_EXT \
                          -DPATH_MAX=255 \
+                         -D_AE_BIMODAL \
                          -qCHARS=signed \
                          -qXPLINK \
                          -qFLOAT=IEEE

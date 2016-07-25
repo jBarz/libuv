@@ -29,6 +29,31 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+#if defined(__MVS__)
+
+#include <_Nascii.h>
+
+static int bimodal_connect(int socket, const struct sockaddr *address,
+                  socklen_t address_len) {
+  if (__isASCII())
+    __a2e_l(((struct sockaddr_un*)address)->sun_path, 
+              strlen(((struct sockaddr_un*)(address))->sun_path)); 
+  return __connect_e(socket, address, address_len);
+}
+
+static int bimodal_bind(int socket, const struct sockaddr *address,
+               socklen_t address_len) {
+  if (__isASCII())
+    __a2e_l(((struct sockaddr_un*)address)->sun_path, 
+              strlen(((struct sockaddr_un*)(address))->sun_path)); 
+  return __bind_e(socket, address, address_len);
+}
+
+#define bind(X,Y,Z)     bimodal_bind(X,Y,Z)
+#define connect(X,Y,Z)  bimodal_connect(X,Y,Z)
+
+#endif
+
 
 int uv_pipe_init(uv_loop_t* loop, uv_pipe_t* handle, int ipc) {
   uv__stream_init(loop, (uv_stream_t*)handle, UV_NAMED_PIPE);

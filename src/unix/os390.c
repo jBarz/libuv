@@ -128,6 +128,9 @@ int uv_exepath(char* buffer, size_t* size) {
   if (buffer == NULL || size == NULL || *size == 0)
     return -EINVAL;
 
+  if (__isASCII())
+    __a2e_l(var, sizeof(var));
+
   char *exe_path=__getenv(var);
   if (exe_path == NULL)
     return -EINVAL;
@@ -136,6 +139,9 @@ int uv_exepath(char* buffer, size_t* size) {
   *size = len > *size - 1 ? *size - 1 : len ;
   memcpy(buffer, exe_path, *size);
   buffer[*size] = '\0';
+
+  if (__isASCII())
+    __e2a_l(buffer, *size);
 
   return 0;
 }
@@ -504,7 +510,7 @@ static int async_message(uv_loop_t* loop) {
   /* first collect all messages */
   struct AioMsg msgin[1024];
   for(int i = 0; i < 1024; ++i) {
-    int msglen =  msgrcv(loop->msgqid, &msgin[i], sizeof(msgin[i].mm_ptr), 0, IPC_NOWAIT );
+    int msglen =  __msgrcv_e(loop->msgqid, &msgin[i], sizeof(msgin[i].mm_ptr), 0, IPC_NOWAIT );
     if (msglen == -1) {
       break;
     }

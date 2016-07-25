@@ -350,3 +350,7 @@ update_timeout:
     timeout = real_timeout;
   }
 }
+
+char** uv_setup_args(int argc, char** argv) {
+  return argv;
+}

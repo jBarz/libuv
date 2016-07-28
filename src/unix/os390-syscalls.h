@@ -91,4 +91,7 @@ int uv__zos_aio_read(uv_stream_t *str,
 
 int uv__zos_aio_accept(uv_stream_t *stream);
 
+/* utility functions */
+int nanosleep(const struct timespec *req, struct timespec *rem);
+
 #endif /* UV_OS390_SYSCALL_H_ */

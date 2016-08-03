@@ -44,8 +44,8 @@
 # pragma clang diagnostic ignored "-Wc99-extensions"
 #endif
 
-#define TEST_PORT 9123
-#define TEST_PORT_2 9124
+#define TEST_PORT 9125
+#define TEST_PORT_2 9126
 
 #ifdef _WIN32
 # define TEST_PIPENAME "\\\\?\\pipe\\uv-test"

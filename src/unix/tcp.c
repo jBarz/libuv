@@ -292,6 +292,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
      an arbitrary port is required to be done manually
   */
 
+  tcp->is_listening = 1;
   if (!(tcp->flags & UV_HANDLE_BOUND)) {
     struct sockaddr_storage saddr;
     socklen_t slen  = sizeof(saddr);

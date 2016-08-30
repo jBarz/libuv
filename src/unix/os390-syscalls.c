@@ -33,6 +33,60 @@
 static int number_of_epolls;
 struct _epoll_list* _global_epoll_list[MAX_EPOLL_INSTANCES];
 
+int alphasort(const void *a, const void *b) {
+
+  return strcoll( (*(const struct dirent **)a)->d_name, 
+                  (*(const struct dirent **)b)->d_name );
+}
+
+int scandir(const char *maindir, struct dirent ***namelist,
+            int (*filter)(const struct dirent *),
+            int (*compar)(const struct dirent **,
+            const struct dirent **)) {
+  struct dirent **nl = NULL;
+  struct dirent *dirent;
+  size_t count = 0;
+  size_t allocated = 0;
+  DIR *mdir;
+
+  mdir = opendir(maindir);
+  if (!mdir)
+    return -1;
+
+  while (1) {
+    dirent = readdir(mdir);
+    if (!dirent)
+      break;
+    if (!filter || filter(dirent)) {
+      struct dirent *copy;
+      copy = malloc(sizeof(*copy));
+      if (!copy) {
+        while (count) {
+          dirent = nl[--count];
+          free(dirent);
+        }
+        free(nl);
+        closedir(mdir);
+        errno = ENOMEM;
+        return -1;
+      }
+      memcpy(copy, dirent, sizeof(*copy));
+
+      nl = realloc(nl, count+1);
+      nl[count++] = copy;
+    }
+  }
+
+  qsort(nl, count, sizeof(struct dirent *),
+      (int (*)(const void *, const void *))compar);
+
+  closedir(mdir);
+
+  *namelist = nl;
+  return count;
+}
+
+
 static int removefd(struct _epoll_list *lst, int fd)
 {
   if(fd == -1)

@@ -373,11 +373,7 @@ static ssize_t uv__fs_scandir(uv_fs_t* req) {
   int n;
 
   dents = NULL;
-#if defined(__MVS__)
-  n = -1;
-#else
   n = scandir(req->path, &dents, uv__fs_scandir_filter, alphasort);
-#endif
 
   /* NOTE: We will use nbufs as an index field */
   req->nbufs = 0;

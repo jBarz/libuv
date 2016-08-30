@@ -93,5 +93,11 @@ int uv__zos_aio_accept(uv_stream_t *stream);
 
 /* utility functions */
 int nanosleep(const struct timespec *req, struct timespec *rem);
+int alphasort(const void *a, const void *b);
+int scandir(const char *maindir, struct dirent ***namelist,
+            int (*filter)(const struct dirent *),
+            int (*compar)(const struct dirent **,
+            const struct dirent **));
+
 
 #endif /* UV_OS390_SYSCALL_H_ */

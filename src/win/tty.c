@@ -57,6 +57,9 @@
 
 #define MAX_INPUT_BUFFER_LENGTH 8192
 
+#ifndef ENABLE_VIRTUAL_TERMINAL_PROCESSING
+#define ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004
+#endif
 
 static void uv_tty_capture_initial_style(CONSOLE_SCREEN_BUFFER_INFO* info);
 static void uv_tty_update_virtual_window(CONSOLE_SCREEN_BUFFER_INFO* info);
@@ -121,6 +124,14 @@ static char uv_tty_default_fg_bright = 0;
 static char uv_tty_default_bg_bright = 0;
 static char uv_tty_default_inverse = 0;
 
+typedef enum {
+  UV_SUPPORTED,
+  UV_UNCHECKED,
+  UV_UNSUPPORTED
+} uv_vtermstate_t;
+/* Determine whether or not ANSI support is enabled. */
+static uv_vtermstate_t uv__vterm_state = UV_UNCHECKED;
+static void uv__determine_vterm_state(HANDLE handle);
 
 void uv_console_init() {
   InitializeCriticalSection(&uv_tty_output_lock);
@@ -162,6 +173,9 @@ int uv_tty_init(uv_loop_t* loop, uv_tty_t* tty, uv_file fd, int readable) {
     /* Obtain the the tty_output_lock because the virtual window state is */
     /* shared between all uv_tty_t handles. */
     EnterCriticalSection(&uv_tty_output_lock);
+
+    if (uv__vterm_state == UV_UNCHECKED)
+      uv__determine_vterm_state(handle);
 
     /* Store the global tty output handle. This handle is used by TTY read */
     /* streams to update the virtual window when a CONSOLE_BUFFER_SIZE_EVENT */
@@ -297,6 +311,8 @@ int uv_tty_set_mode(uv_tty_t* tty, uv_tty_mode_t mode) {
       break;
     case UV_TTY_MODE_IO:
       return UV_ENOTSUP;
+    default:
+      return UV_EINVAL;
   }
 
   if (!SetConsoleMode(tty->handle, flags)) {
@@ -507,8 +523,10 @@ static void uv_tty_queue_read_line(uv_loop_t* loop, uv_tty_t* handle) {
   req = &handle->read_req;
   memset(&req->u.io.overlapped, 0, sizeof(req->u.io.overlapped));
 
+  handle->tty.rd.read_line_buffer = uv_buf_init(NULL, 0);
   handle->alloc_cb((uv_handle_t*) handle, 8192, &handle->tty.rd.read_line_buffer);
-  if (handle->tty.rd.read_line_buffer.len == 0) {
+  if (handle->tty.rd.read_line_buffer.base == NULL ||
+      handle->tty.rd.read_line_buffer.len == 0) {
     handle->read_cb((uv_stream_t*) handle,
                     UV_ENOBUFS,
                     &handle->tty.rd.read_line_buffer);
@@ -831,8 +849,9 @@ void uv_process_tty_read_raw_req(uv_loop_t* loop, uv_tty_t* handle,
       if (handle->tty.rd.last_key_offset < handle->tty.rd.last_key_len) {
         /* Allocate a buffer if needed */
         if (buf_used == 0) {
+          buf = uv_buf_init(NULL, 0);
           handle->alloc_cb((uv_handle_t*) handle, 1024, &buf);
-          if (buf.len == 0) {
+          if (buf.base == NULL || buf.len == 0) {
             handle->read_cb((uv_stream_t*) handle, UV_ENOBUFS, &buf);
             goto out;
           }
@@ -1611,6 +1630,33 @@ static int uv_tty_write_bufs(uv_tty_t* handle,
     uv_buf_t buf = bufs[i];
     unsigned int j;
 
+  if (uv__vterm_state == UV_SUPPORTED) {
+    utf16_buf_used = MultiByteToWideChar(CP_UTF8,
+                                         0,
+                                         buf.base,
+                                         buf.len,
+                                         NULL,
+                                         0);
+
+    if (utf16_buf_used == 0) {
+      *error = GetLastError();
+      break;
+    }
+
+    if (!MultiByteToWideChar(CP_UTF8,
+                             0,
+                             buf.base,
+                             buf.len,
+                             utf16_buf,
+                             utf16_buf_used)) {
+      *error = GetLastError();
+      break;
+    }
+
+    FLUSH_TEXT();
+    continue;
+  }
+
     for (j = 0; j < buf.len; j++) {
       unsigned char c = buf.base[j];
 
@@ -2167,4 +2213,25 @@ void uv_process_tty_connect_req(uv_loop_t* loop, uv_tty_t* handle,
 int uv_tty_reset_mode(void) {
   /* Not necessary to do anything. */
   return 0;
+}
+
+/* Determine whether or not this version of windows supports
+ * proper ANSI color codes. Should be supported as of windows
+ * 10 version 1511, build number 10.0.10586.
+ */
+static void uv__determine_vterm_state(HANDLE handle) {
+  DWORD dwMode = 0;
+
+  if (!GetConsoleMode(handle, &dwMode)) {
+    uv__vterm_state = UV_UNSUPPORTED;
+    return;
+  }
+
+  dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+  if (!SetConsoleMode(handle, dwMode)) {
+    uv__vterm_state = UV_UNSUPPORTED;
+    return;
+  }
+
+  uv__vterm_state = UV_SUPPORTED;
 }

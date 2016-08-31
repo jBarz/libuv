@@ -197,7 +197,7 @@
             }],
           ],
         }],
-        [ 'OS in "linux mac ios android"', {
+        [ 'OS in "linux mac ios android zos"', {
           'sources': [ 'src/unix/proctitle.c' ],
         }],
         [ 'OS != "zos"', {
@@ -468,11 +468,11 @@
             'test/runner-unix.c',
             'test/runner-unix.h',
           ],
-          'conditions': [ 
+          'conditions': [
             [ 'OS != "zos"', {
               'defines': [ '_GNU_SOURCE' ],
               'cflags': [ '-Wno-long-long' ],
-            }], 
+            }],
           ]},
         ],
         [ 'OS in "mac dragonflybsd freebsd linux netbsd openbsd".split()', {
@@ -494,10 +494,10 @@
         }],
         ['uv_library=="shared_library"', {
           'defines': [ 'USING_UV_SHARED=1' ],
-          'conditions': [ 
+          'conditions': [
             [ 'OS == "zos"', {
               'cflags': [ '-Wc,DLL' ],
-            }], 
+            }],
           ],
         }],
       ],
@@ -555,10 +555,10 @@
         }],
         ['uv_library=="shared_library"', {
           'defines': [ 'USING_UV_SHARED=1' ],
-          'conditions': [ 
+          'conditions': [
             [ 'OS == "zos"', {
               'cflags': [ '-Wc,DLL' ],
-            }], 
+            }],
           ],
         }],
       ],

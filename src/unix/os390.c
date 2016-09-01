@@ -26,6 +26,7 @@
 #include <utmpx.h>
 #include <sys/time.h>
 #include <sys/ps.h>
+#include <unistd.h>
 #include "//'SYS1.SAMPLIB(CSRSIC)'"
 
 #define CVT_PTR           0x10
@@ -122,28 +123,83 @@ uint64_t uv__hrtime(uv_clocktype_t type) {
 }
 
 int uv_exepath(char* buffer, size_t* size) {
-  size_t len;
-  char var[] = "EXE_PATH";
+  int res;
+  char args[PATH_MAX];
+  char abspath[PATH_MAX];
+  size_t abspath_size;
+  int pid;
 
   if (buffer == NULL || size == NULL || *size == 0)
     return -EINVAL;
 
-  if (__isASCII())
-    __a2e_l(var, sizeof(var));
-
-  char *exe_path=__getenv(var);
-  if (exe_path == NULL)
+  pid = getpid();
+  res = getexe(pid, args, sizeof(args));
+  if (res < 0)
     return -EINVAL;
 
-  len = strlen(exe_path);
-  *size = len > *size - 1 ? *size - 1 : len ;
-  memcpy(buffer, exe_path, *size);
-  buffer[*size] = '\0';
+  /*
+   * Possibilities for args:
+   * i) an absolute path such as: /home/user/myprojects/nodejs/node
+   * ii) a relative path such as: ./node or ../myprojects/nodejs/node
+   * iii) a bare filename such as "node", after exporting PATH variable
+   *     to its location.
+   */
 
-  if (__isASCII())
-    __e2a_l(buffer, *size);
+  /* Case i) and ii) absolute or relative paths */
+  if (strchr(args, '/') != NULL) {
+    if (realpath(args, abspath) != abspath)
+      return -errno;
 
-  return 0;
+    abspath_size = strlen(abspath);
+
+    *size -= 1;
+    if (*size > abspath_size)
+      *size = abspath_size;
+
+    memcpy(buffer, abspath, *size);
+    buffer[*size] = '\0';
+
+    return 0;
+  } else {
+  /* Case iii). Search PATH environment variable */
+    char trypath[PATH_MAX];
+    char *clonedpath = NULL;
+    char *token = NULL;
+    char *path = getenv("PATH");
+
+    if (path == NULL)
+      return -EINVAL;
+
+    clonedpath = uv__strdup(path);
+    if (clonedpath == NULL)
+      return -ENOMEM;
+
+    token = strtok(clonedpath, ":");
+    while (token != NULL) {
+      snprintf(trypath, sizeof(trypath) - 1, "%s/%s", token, args);
+      if (realpath(trypath, abspath) == abspath) {
+        /* Check the match is executable */
+        if (access(abspath, X_OK) == 0) {
+          abspath_size = strlen(abspath);
+
+          *size -= 1;
+          if (*size > abspath_size)
+            *size = abspath_size;
+
+          memcpy(buffer, abspath, *size);
+          buffer[*size] = '\0';
+
+          uv__free(clonedpath);
+          return 0;
+        }
+      }
+      token = strtok(NULL, ":");
+    }
+    uv__free(clonedpath);
+
+    /* Out of tokens (path entries), and no match found */
+    return -EINVAL;
+  }
 }
 
 uint64_t uv_get_free_memory(void) {

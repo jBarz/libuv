@@ -28,6 +28,9 @@
 #include <dirent.h>
 #include <poll.h>
 #include <pthread.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <sys/msg.h>
 
 #define EPOLL_CTL_ADD             1
 #define EPOLL_CTL_DEL             2
@@ -49,6 +52,9 @@ struct epoll_event {
 typedef struct {
   QUEUE member;
   struct pollfd* items;
+  fd_set *readlst;
+  fd_set *writelst;
+  fd_set *excptlst;
   unsigned long size;
 } uv__os390_epoll;
 

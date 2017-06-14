@@ -87,6 +87,11 @@ int scandir(const char* maindir, struct dirent*** namelist,
 }
 
 
+static unsigned int next_multiple_of_four(unsigned int val) {
+  return (val + 3) & ~3;
+}
+
+
 static unsigned int next_power_of_two(unsigned int val) {
   val -= 1;
   val |= val >> 1;
@@ -103,6 +108,9 @@ static void maybe_resize(uv__os390_epoll* lst, unsigned int len) {
   unsigned int newsize;
   unsigned int i;
   struct pollfd* newlst;
+  fd_set *readlst;
+  fd_set *writelst;
+  fd_set *excptlst;
 
   if (len <= lst->size)
     return;
@@ -115,8 +123,27 @@ static void maybe_resize(uv__os390_epoll* lst, unsigned int len) {
   for (i = lst->size; i < newsize; ++i)
     newlst[i].fd = -1;
 
+  if ( (newsize >> 3) > (lst->size >> 3) ) {
+    int newbitsize = next_multiple_of_four(newsize >> 3);
+    readlst = uv__realloc(lst->readlst, newbitsize);
+    writelst = uv__realloc(lst->writelst, newbitsize);
+    excptlst = uv__realloc(lst->excptlst, newbitsize);
+  }
+
+  if (readlst == NULL || writelst == NULL || excptlst == NULL)
+    abort();
+  for (i = lst->size; i < newsize; ++i) {
+    FD_CLR(i, readlst);
+    FD_CLR(i, writelst);
+    FD_CLR(i, excptlst);
+  }
+
   lst->items = newlst;
   lst->size = newsize;
+
+  lst->readlst = readlst;
+  lst->writelst = writelst;
+  lst->excptlst = excptlst;
 }
 
 
@@ -141,6 +168,9 @@ uv__os390_epoll* epoll_create1(int flags) {
   /* initialize list */
   lst->size = 0;
   lst->items = NULL;
+  lst->readlst = NULL;
+  lst->writelst = NULL;
+  lst->excptlst = NULL;
   return lst;
 }
 
@@ -155,6 +185,9 @@ int epoll_ctl(uv__os390_epoll* lst,
       return -1;
     }
     lst->items[fd].fd = -1;
+    FD_CLR(fd, lst->readlst);
+    FD_CLR(fd, lst->writelst);
+    FD_CLR(fd, lst->excptlst);
   } else if(op == EPOLL_CTL_ADD) {
     maybe_resize(lst, fd + 1);
     if (lst->items[fd].fd != -1) {
@@ -163,12 +196,30 @@ int epoll_ctl(uv__os390_epoll* lst,
     }
     lst->items[fd].fd = fd;
     lst->items[fd].events = event->events;
+    FD_CLR(fd, lst->readlst);
+    FD_CLR(fd, lst->writelst);
+    FD_CLR(fd, lst->excptlst);
+    if (event->events & POLLIN)
+      FD_SET(fd, lst->readlst);
+    if (event->events & POLLOUT)
+      FD_SET(fd, lst->writelst);
+    if (event->events & POLLHUP)
+      FD_SET(fd, lst->excptlst);
   } else if(op == EPOLL_CTL_MOD) {
     if (fd >= lst->size || lst->items[fd].fd == -1) {
       errno = ENOENT;
       return -1;
     }
     lst->items[fd].events = event->events;
+    FD_CLR(fd, lst->readlst);
+    FD_CLR(fd, lst->writelst);
+    FD_CLR(fd, lst->excptlst);
+    if (event->events & POLLIN)
+      FD_SET(fd, lst->readlst);
+    if (event->events & POLLOUT)
+      FD_SET(fd, lst->writelst);
+    if (event->events & POLLHUP)
+      FD_SET(fd, lst->excptlst);
   } else
     abort();
 
@@ -182,32 +233,40 @@ int epoll_wait(uv__os390_epoll* lst, struct epoll_event* events,
   struct pollfd* pfds;
   int pollret;
   int reventcount;
+  struct timeval tm;
 
   uv_mutex_lock(&global_epoll_lock);
   uv_mutex_unlock(&global_epoll_lock);
   size = lst->size;
   pfds = lst->items;
-  pollret = poll(pfds, size, timeout);
+  tm.tv_sec = timeout / 1000;
+  tm.tv_usec = (timeout % 1000) * 1000;
+  pollret = select(lst->size, lst->readlst, lst->writelst, lst->excptlst, timeout == -1 ? NULL : &tm);
   if(pollret == -1)
     return pollret;
 
   reventcount = 0;
   for (int i = 0; i < lst->size && i < maxevents; ++i) {
     struct epoll_event ev;
+    int fd;
 
     ev.events = 0;
-    ev.fd = pfds[i].fd;
-    if(!pfds[i].revents)
-      continue;
+    ev.fd = fd = pfds[i].fd;
 
-    if(pfds[i].revents & POLLRDNORM)
+    if(FD_ISSET(pfds[i].fd, lst->readlst))
       ev.events = ev.events | POLLIN;
+    if(pfds[i].events & POLLRDNORM)
+      FD_SET(fd, lst->readlst);
 
-    if(pfds[i].revents & POLLWRNORM)
+    if(FD_ISSET(fd, lst->writelst))
       ev.events = ev.events | POLLOUT;
+    if(pfds[i].events & POLLWRNORM)
+      FD_SET(fd, lst->writelst);
 
-    if(pfds[i].revents & POLLHUP)
+    if(FD_ISSET(fd, lst->excptlst))
       ev.events = ev.events | POLLHUP;
+    if(pfds[i].events & POLLHUP)
+      FD_SET(fd, lst->excptlst);
 
     pfds[i].revents = 0;
     events[reventcount++] = ev;
@@ -226,8 +285,12 @@ int epoll_file_close(int fd) {
     uv__os390_epoll* lst;
 
     lst = QUEUE_DATA(q, uv__os390_epoll, member);
-    if (fd < lst->size && lst->items != NULL && lst->items[fd].fd != -1)
+    if (fd < lst->size && lst->items != NULL && lst->items[fd].fd != -1) {
       lst->items[fd].fd = -1;
+      FD_CLR(fd, lst->readlst);
+      FD_CLR(fd, lst->writelst);
+      FD_CLR(fd, lst->excptlst);
+    }
   }
 
   uv_mutex_unlock(&global_epoll_lock);
@@ -239,7 +302,13 @@ void epoll_queue_close(uv__os390_epoll* lst) {
   QUEUE_REMOVE(&lst->member);
   uv_mutex_unlock(&global_epoll_lock);
   uv__free(lst->items);
+  uv__free(lst->readlst);
+  uv__free(lst->writelst);
+  uv__free(lst->excptlst);
   lst->items = NULL;
+  lst->readlst = NULL;
+  lst->writelst = NULL;
+  lst->excptlst = NULL;
 }
 
 

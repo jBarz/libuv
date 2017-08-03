@@ -65,6 +65,7 @@ static void exit_cb(uv_process_t* process,
                     int64_t exit_status,
                     int term_signal) {
   printf("exit_cb\n");
+  printf("exit_status = %d\n", exit_status);
   exit_cb_called++;
   ASSERT(exit_status == 1);
   ASSERT(term_signal == 0);
@@ -1560,6 +1561,7 @@ TEST_IMPL(spawn_reads_child_path) {
   init_process_options("spawn_helper1", exit_cb);
 
   /* Set up the PATH env variable */
+printf("exepath = %s\n", exepath);
   for (len = strlen(exepath);
        exepath[len - 1] != '/' && exepath[len - 1] != '\\';
        len--);
@@ -1567,6 +1569,9 @@ TEST_IMPL(spawn_reads_child_path) {
   exepath[len] = 0;
   strcpy(path, "PATH=");
   strcpy(path + 5, exepath);
+printf("env = %s\n", getenv("PATH"));
+printf("path = %s\n", path);
+printf("file = %s\n", file);
 #if defined(__CYGWIN__) || defined(__MSYS__)
   /* Carry over the dynamic linker path in case the test runner
      is linked against cyguv-1.dll or msys-uv-1.dll, see above.  */

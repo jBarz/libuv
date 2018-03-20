@@ -432,13 +432,81 @@ static int test_tcp(unsigned int num_servers, unsigned int num_clients) {
 }
 
 
-BENCHMARK_IMPL(tcp_multi_accept2) {
-  return test_tcp(2, 40);
+BENCHMARK_IMPL(tcp_multi_accept2_2) {
+  return test_tcp(2, 2);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_4) {
+  return test_tcp(2, 4);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_8) {
+  return test_tcp(2, 8);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_16) {
+  return test_tcp(2, 16);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_32) {
+  return test_tcp(2, 32);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_64) {
+  return test_tcp(2, 64);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_128) {
+  return test_tcp(2, 128);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_256) {
+  return test_tcp(2, 256);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_512) {
+  return test_tcp(2, 512);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_1024) {
+  return test_tcp(2, 1024);
+}
+BENCHMARK_IMPL(tcp_multi_accept2_2048) {
+  return test_tcp(2, 2048);
+}
+
+
+BENCHMARK_IMPL(tcp_multi_accept1_1) {
+  return test_tcp(1, 1);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_2) {
+  return test_tcp(1, 2);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_4) {
+  return test_tcp(1, 4);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_8) {
+  return test_tcp(1, 8);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_16) {
+  return test_tcp(1, 16);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_32) {
+  return test_tcp(1, 32);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_64) {
+  return test_tcp(1, 64);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_128) {
+  return test_tcp(1, 128);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_256) {
+  return test_tcp(1, 256);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_512) {
+  return test_tcp(1, 512);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_1024) {
+  return test_tcp(1, 1024);
+}
+BENCHMARK_IMPL(tcp_multi_accept1_2048) {
+  return test_tcp(1, 2048);
 }
 
 
 BENCHMARK_IMPL(tcp_multi_accept4) {
-  return test_tcp(4, 40);
+  return test_tcp(4, 512);
 }
 
 

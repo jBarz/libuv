@@ -28,11 +28,11 @@
 
 static int TARGET_CONNECTIONS;
 #define WRITE_BUFFER_SIZE           8192
-#define MAX_SIMULTANEOUS_CONNECTS   100
+#define MAX_SIMULTANEOUS_CONNECTS   32768
 
 #define PRINT_STATS                 0
 #define STATS_INTERVAL              1000 /* msec */
-#define STATS_COUNT                 5
+#define STATS_COUNT                 10
 
 
 static void do_write(uv_stream_t*);
@@ -69,7 +69,7 @@ static int stats_left = 0;
 static char write_buffer[WRITE_BUFFER_SIZE];
 
 /* Make this as large as you need. */
-#define MAX_WRITE_HANDLES 1000
+#define MAX_WRITE_HANDLES 32768
 
 static stream_type type;
 
@@ -115,6 +115,7 @@ static void show_stats(uv_timer_t* handle) {
         uv_close((uv_handle_t*) &pipe_write_handles[i], NULL);
     }
 
+    MAKE_VALGRIND_HAPPY();
     exit(0);
   }
 
@@ -188,6 +189,9 @@ static void read_cb(uv_stream_t* stream, ssize_t bytes, const uv_buf_t* buf) {
 
 
 static void write_cb(uv_write_t* req, int status) {
+  if(!stats_left)
+    return;
+
   ASSERT(status == 0);
 
   req_free((uv_req_t*) req);
@@ -460,6 +464,96 @@ BENCHMARK_IMPL(tcp_pump100_client) {
 
 BENCHMARK_IMPL(tcp_pump1_client) {
   tcp_pump(1);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump2_client) {
+  tcp_pump(2);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump4_client) {
+  tcp_pump(4);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump8_client) {
+  tcp_pump(8);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump16_client) {
+  tcp_pump(16);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump32_client) {
+  tcp_pump(32);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump64_client) {
+  tcp_pump(64);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump128_client) {
+  tcp_pump(128);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump256_client) {
+  tcp_pump(256);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump512_client) {
+  tcp_pump(512);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump1024_client) {
+  tcp_pump(1024);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump2048_client) {
+  tcp_pump(2048);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump4096_client) {
+  tcp_pump(4096);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump8192_client) {
+  tcp_pump(8192);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump16384_client) {
+  tcp_pump(16384);
+  return 0;
+}
+
+
+BENCHMARK_IMPL(tcp_pump32768_client) {
+  tcp_pump(32768);
   return 0;
 }
 

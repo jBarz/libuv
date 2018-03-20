@@ -31,6 +31,21 @@ BENCHMARK_DECLARE (pipe_pound_100)
 BENCHMARK_DECLARE (pipe_pound_1000)
 BENCHMARK_DECLARE (tcp_pump100_client)
 BENCHMARK_DECLARE (tcp_pump1_client)
+BENCHMARK_DECLARE (tcp_pump2_client)
+BENCHMARK_DECLARE (tcp_pump4_client)
+BENCHMARK_DECLARE (tcp_pump8_client)
+BENCHMARK_DECLARE (tcp_pump16_client)
+BENCHMARK_DECLARE (tcp_pump32_client)
+BENCHMARK_DECLARE (tcp_pump64_client)
+BENCHMARK_DECLARE (tcp_pump128_client)
+BENCHMARK_DECLARE (tcp_pump256_client)
+BENCHMARK_DECLARE (tcp_pump512_client)
+BENCHMARK_DECLARE (tcp_pump1024_client)
+BENCHMARK_DECLARE (tcp_pump2048_client)
+BENCHMARK_DECLARE (tcp_pump4096_client)
+BENCHMARK_DECLARE (tcp_pump8192_client)
+BENCHMARK_DECLARE (tcp_pump16384_client)
+BENCHMARK_DECLARE (tcp_pump32768_client)
 BENCHMARK_DECLARE (pipe_pump100_client)
 BENCHMARK_DECLARE (pipe_pump1_client)
 
@@ -110,6 +125,51 @@ TASK_LIST_START
 
   BENCHMARK_ENTRY  (tcp_pump1_client)
   BENCHMARK_HELPER (tcp_pump1_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump2_client)
+  BENCHMARK_HELPER (tcp_pump2_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump4_client)
+  BENCHMARK_HELPER (tcp_pump4_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump8_client)
+  BENCHMARK_HELPER (tcp_pump8_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump16_client)
+  BENCHMARK_HELPER (tcp_pump16_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump32_client)
+  BENCHMARK_HELPER (tcp_pump32_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump64_client)
+  BENCHMARK_HELPER (tcp_pump64_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump128_client)
+  BENCHMARK_HELPER (tcp_pump128_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump256_client)
+  BENCHMARK_HELPER (tcp_pump256_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump512_client)
+  BENCHMARK_HELPER (tcp_pump512_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump1024_client)
+  BENCHMARK_HELPER (tcp_pump1024_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump2048_client)
+  BENCHMARK_HELPER (tcp_pump2048_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump4096_client)
+  BENCHMARK_HELPER (tcp_pump4096_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump8192_client)
+  BENCHMARK_HELPER (tcp_pump8192_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump16384_client)
+  BENCHMARK_HELPER (tcp_pump16384_client, tcp_pump_server)
+
+  BENCHMARK_ENTRY  (tcp_pump32768_client)
+  BENCHMARK_HELPER (tcp_pump32768_client, tcp_pump_server)
 
   BENCHMARK_ENTRY  (tcp4_pound_100)
   BENCHMARK_HELPER (tcp4_pound_100, tcp4_echo_server)

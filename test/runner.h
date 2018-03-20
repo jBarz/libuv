@@ -73,7 +73,7 @@ typedef struct {
   int run_benchmark_##name(void);
 
 #define BENCHMARK_ENTRY(name)                       \
-    { #name, #name, &run_benchmark_##name, 0, 0, 60000 },
+    { #name, #name, &run_benchmark_##name, 0, 0, 600000 },
 
 #define HELPER_DECLARE(name)                        \
   int run_helper_##name(void);

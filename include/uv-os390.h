@@ -36,4 +36,7 @@
 #define UV_CONNECT_PRIVATE_PLATFORM_FIELDS                                    \
   struct aiocb aio;                                                           \
 
+#define UV_IO_PRIVATE_PLATFORM_FIELDS                                         \
+  struct aiocb aio;                                                           \
+
 #endif /* UV_MVS_H */

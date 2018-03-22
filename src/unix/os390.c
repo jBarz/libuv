@@ -795,6 +795,39 @@ static int fs_event_message(_RFIM* msg) {
 }
 
 
+static int aio_accept_message(struct aiocb *aio) {
+  uv__io_t *watcher;
+  uv_stream_t *handle;
+  QUEUE* q;
+  int events;
+  int fd; 
+
+  watcher = container_of(aio, uv__io_t, aio);
+  handle = container_of(watcher, uv_stream_t, io_watcher);
+
+  events = POLLIN;
+  if (aio->aio_rv == -1)
+    events = POLLERR;
+
+  /* Give users only events they're interested in. Prevents spurious
+   * callbacks when previous callback invocation in this loop has stopped
+   * the current watcher. Also, filters out events that users has not
+   * requested us to watch.
+   */
+  events &= watcher->pevents | POLLERR;
+  if (events == POLLERR)
+    events |= watcher->pevents & (POLLIN | POLLOUT);
+
+  /* File descriptor that we've stopped watching, ignore */
+  if (watcher->fd == -1 || handle->loop->watchers[watcher->fd] == NULL)
+    return 0;
+
+  /* Call callback */
+  watcher->cb(handle->loop, watcher, events);
+  return 0;
+}
+
+
 static int aio_connect_message(struct aiocb* aio) {
   uv_connect_t* req;
   uv_stream_t* handle;
@@ -863,7 +896,9 @@ static int os390_message_queue_handler(uv__os390_epoll* ep) {
       abort();
 
     if (msg.type == SIGIO) {
-      if (aio_connect_message(msg.aiomsg.aio) == 0)
+      if (msg.aiomsg.aio->aio_cmd == AIO_CONNECT && aio_connect_message(msg.aiomsg.aio) == 0)
+        ++nevents;
+      else if (msg.aiomsg.aio->aio_cmd == AIO_ACCEPT && aio_accept_message(msg.aiomsg.aio) == 0)
         ++nevents;
     } else {
       /* File interest event */
@@ -918,6 +953,29 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       /* Skip this. The connect request has been dispatched
        * via BPX4AIO. Wait for it to pop up on message queue.
        */
+    } else if (w->aio.aio_cmd == AIO_ACCEPT) {
+      /* Use BPX4AIO */
+      /* For connect, it has already been dispatched */
+      int rv;
+      int rc;
+      int rsn;
+      struct {
+        long int type;
+        void* aio;
+      } aiomsg;
+
+      BPX4AIO(sizeof(w->aio), &w->aio, &rv, &rc, &rsn);
+      if (rv < 0) {
+        /* Failed immedietely */
+        w->aio.aio_rv = rv;
+        w->aio.aio_rc = rc;
+        w->aio.aio_rsn = rsn;
+        aiomsg.type = SIGIO;
+        aiomsg.aio = &w->aio;
+        stream->delayed_error = -rc;
+        if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), 0))
+          abort();
+      }
     } else {
       /* Register this event to be polled. */
       e.events = w->pevents;
@@ -1128,4 +1186,60 @@ int uv__os390_connect(uv_connect_t* req, uv_stream_t* handle,
     errno = rc;
     return -1;
   }
+}
+
+
+int uv__os390_listen(uv_stream_t *handle, int backlog) {
+  struct aiocb *aio_accept;
+  uv__os390_epoll* ep;
+  uv__io_t* w;
+  int rv;
+  int rc;
+  int rsn;
+
+  if (listen(handle->io_watcher.fd, backlog)) {
+    return -1;
+  }
+
+  /* The BPX4AIO call requires the socket to be in blocking mode. */
+  w = &handle->io_watcher;
+  rv = uv__nonblock(w->fd, 0);
+  if (rv) {
+    errno = rv;
+    return -1;
+  }
+
+  ep = handle->loop->ep;
+  aio_accept = &w->aio;
+  memset(aio_accept, 0, sizeof(struct aiocb));
+  aio_accept->aio_fildes = w->fd;
+  aio_accept->aio_notifytype = AIO_MSGQ;
+  aio_accept->aio_cmd = AIO_ACCEPT;
+  aio_accept->aio_msgev_qid = ep->msg_queue;
+  return 0;
+}
+
+
+int uv__os390_accept(uv_stream_t *handle) {
+  uv__io_t* w;
+  int rv;
+
+  if (handle->type != UV_TCP)
+    return uv__accept(uv__stream_fd(handle));
+
+  w = &handle->io_watcher;
+  if (w->aio.aio_cmd != AIO_ACCEPT)
+    return -EINVAL;
+
+  if (w->aio.aio_rc == EINPROGRESS)
+    return -EWOULDBLOCK;
+
+  rv = uv__nonblock(w->aio.aio_rv, 1);
+  if (rv) {
+    errno = rv;
+    return -1;
+  }
+
+  w->aio.aio_rc = EINPROGRESS;
+  return w->aio.aio_rv;
 }

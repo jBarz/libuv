@@ -66,6 +66,12 @@ struct uv__stream_select_s {
     (errno == EAGAIN || errno == EWOULDBLOCK || errno == ENOBUFS)
 #endif /* defined(__APPLE__) */
 
+#ifdef __MVS__
+# define platform_accept(handle) uv__os390_accept(handle)
+#else
+# define platform_accept(handle) uv__accept(uv__stream_fd(handle))
+#endif
+
 static void uv__stream_connect(uv_stream_t*);
 static void uv__write(uv_stream_t* stream);
 static void uv__read(uv_stream_t* stream);
@@ -537,7 +543,7 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
       return;
 #endif /* defined(UV_HAVE_KQUEUE) */
 
-    err = uv__accept(uv__stream_fd(stream));
+    err = platform_accept(stream);
     if (err < 0) {
       if (err == UV_EAGAIN || err == UV__ERR(EWOULDBLOCK))
         return;  /* Not an error. */

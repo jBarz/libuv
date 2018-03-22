@@ -279,7 +279,7 @@ int epoll_wait(uv__os390_epoll* lst, struct epoll_event* events,
   int pollret;
   int reventcount;
 
-  size = _SET_FDS_MSGS(size, 1, lst->size - 1);
+  _SET_FDS_MSGS(size, 1, lst->size - 1);
   pfds = lst->items;
   pollret = poll(pfds, size, timeout);
   if (pollret <= 0)
@@ -289,7 +289,7 @@ int epoll_wait(uv__os390_epoll* lst, struct epoll_event* events,
 
   reventcount = 0;
   for (int i = 0; 
-       i < lst->size && i < maxevents && reventcount < pollret; ++i) {
+       i < lst->size && reventcount < maxevents && reventcount < pollret; ++i) {
     struct epoll_event ev;
 
     if (pfds[i].fd == -1 || pfds[i].revents == 0)

@@ -27,6 +27,13 @@ static uv_tcp_t tcp_handle;
 static uv_write_t write_req;
 
 
+static void fail_alloc_cb(void) {
+#ifndef __MVS__
+  ASSERT(0 && "fail_alloc_cb called");
+#endif
+}
+
+
 static void fail_cb(void) {
   ASSERT(0 && "fail_cb called");
 }
@@ -53,7 +60,7 @@ static void connect_cb(uv_connect_t* req, int status) {
   ASSERT(0 == status);
   ASSERT(0 == uv_timer_start(&timer_handle, timer_cb, 50, 0));
   ASSERT(0 == uv_read_start((uv_stream_t*) &tcp_handle,
-                            (uv_alloc_cb) fail_cb,
+                            (uv_alloc_cb) fail_alloc_cb,
                             (uv_read_cb) fail_cb));
 }
 

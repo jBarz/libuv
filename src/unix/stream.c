@@ -68,8 +68,14 @@ struct uv__stream_select_s {
 
 #ifdef __MVS__
 # define platform_accept(handle) uv__os390_accept(handle)
+# define platform_read(handle, buf, len) uv__os390_read(handle, buf, len)
+# define platform_write(req, handle, buf, len) uv__os390_write(req, handle, buf, len)
+# define platform_writev(req, handle, buf, len) uv__os390_writev(req, handle, buf, len)
 #else
 # define platform_accept(handle) uv__accept(uv__stream_fd(handle))
+# define platform_read(handle, buf, len) read(uv__stream_fd(handle), buf, len)
+# define platform_write(req, handle, buf, len) write(uv__stream_fd(handle), buf, len)
+# define platform_writev(req, handle, buf, len) write(uv__stream_fd(handle), buf, len)
 #endif
 
 static void uv__stream_connect(uv_stream_t*);
@@ -852,9 +858,9 @@ start:
   } else {
     do {
       if (iovcnt == 1) {
-        n = write(uv__stream_fd(stream), iov[0].iov_base, iov[0].iov_len);
+        n = platform_write(req, stream, iov[0].iov_base, iov[0].iov_len);
       } else {
-        n = writev(uv__stream_fd(stream), iov, iovcnt);
+        n = platform_writev(req, stream, iov, iovcnt);
       }
     }
 #if defined(__APPLE__)
@@ -1168,7 +1174,7 @@ static void uv__read(uv_stream_t* stream) {
 
     if (!is_ipc) {
       do {
-        nread = read(uv__stream_fd(stream), buf.base, buf.len);
+        nread = platform_read(stream, buf.base, buf.len);
       }
       while (nread < 0 && errno == EINTR);
     } else {
@@ -1259,6 +1265,12 @@ static void uv__read(uv_stream_t* stream) {
         stream->flags |= UV_STREAM_READ_PARTIAL;
         return;
       }
+
+#ifdef __MVS__
+      /* On z/OS, we can only do one read per loop. */
+      stream->flags |= UV_STREAM_READ_PARTIAL;
+      return;
+#endif
     }
   }
 }
@@ -1292,6 +1304,9 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
   req->cb = cb;
   stream->shutdown_req = req;
   stream->flags |= UV_STREAM_SHUTTING;
+#if defined(__MVS__)
+  memset(&req->aio, 0, sizeof(req->aio));
+#endif
 
   uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
   uv__stream_osx_interrupt_select(stream);
@@ -1461,7 +1476,10 @@ int uv_write2(uv_write_t* req,
   req->error = 0;
   req->send_handle = send_handle;
   QUEUE_INIT(&req->queue);
-
+#if defined(__MVS__)
+  req->aio.aio_cmd = 0;
+#endif
+  
   req->bufs = req->bufsml;
   if (nbufs > ARRAY_SIZE(req->bufsml))
     req->bufs = uv__malloc(nbufs * sizeof(bufs[0]));

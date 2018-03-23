@@ -32,6 +32,8 @@
          uv__os390_connect(req, handle, addr, addrlen)
 # define platform_listen(handle, backlog) \
          uv__os390_listen(handle, backlog)
+# define  uv__socket(domain, type, protocol) \
+          socket(domain, type, protocol)
 #else
 # define platform_connect(req, handle, addr, addrlen) \
          connect(uv__stream_fd(handle), addr, addrlen)
@@ -273,9 +275,11 @@ int uv__tcp_connect(uv_connect_t* req,
 int uv_tcp_open(uv_tcp_t* handle, uv_os_sock_t sock) {
   int err;
 
+#if !defined(__MVS__)
   err = uv__nonblock(sock, 1);
   if (err)
     return err;
+#endif
 
   return uv__stream_open((uv_stream_t*)handle,
                          sock,

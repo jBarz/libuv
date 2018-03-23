@@ -82,6 +82,10 @@
 # define UV_IO_PRIVATE_PLATFORM_FIELDS /* empty */
 #endif
 
+#ifndef UV_SHUTDOWN_PRIVATE_PLATFORM_FIELDS
+# define UV_SHUTDOWN_PRIVATE_PLATFORM_FIELDS /* empty */
+#endif
+
 struct uv__io_s;
 struct uv_loop_s;
 
@@ -118,6 +122,10 @@ struct uv__io_s {
 
 #ifndef UV_CONNECT_PRIVATE_PLATFORM_FIELDS
 # define UV_CONNECT_PRIVATE_PLATFORM_FIELDS /* empty */
+#endif
+
+#ifndef UV_WRITE_PRIVATE_PLATFORM_FIELDS
+# define UV_WRITE_PRIVATE_PLATFORM_FIELDS /* empty */
 #endif
 
 /* Note: May be cast to struct iovec. See writev(2). */
@@ -242,12 +250,14 @@ typedef struct {
   unsigned int nbufs;                                                         \
   int error;                                                                  \
   uv_buf_t bufsml[4];                                                         \
+  UV_WRITE_PRIVATE_PLATFORM_FIELDS                                            \
 
 #define UV_CONNECT_PRIVATE_FIELDS                                             \
   void* queue[2];                                                             \
   UV_CONNECT_PRIVATE_PLATFORM_FIELDS                                          \
 
-#define UV_SHUTDOWN_PRIVATE_FIELDS /* empty */
+#define UV_SHUTDOWN_PRIVATE_FIELDS                                            \
+  UV_SHUTDOWN_PRIVATE_PLATFORM_FIELDS
 
 #define UV_UDP_SEND_PRIVATE_FIELDS                                            \
   void* queue[2];                                                             \

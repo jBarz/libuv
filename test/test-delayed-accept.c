@@ -90,6 +90,7 @@ static void connection_cb(uv_stream_t* tcp, int status) {
 
   timer_handle->data = tcp;
 
+printf("JBAR started 1000 ms timer\n");
   r = uv_timer_start(timer_handle, do_accept, 1000, 0);
   ASSERT(r == 0);
 

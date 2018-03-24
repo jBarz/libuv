@@ -27,6 +27,7 @@
 #include <search.h>
 #include <termios.h>
 #include <sys/msg.h>
+#include <sys/time.h>
 
 #define CW_CONDVAR 32
 
@@ -279,13 +280,19 @@ int epoll_wait(uv__os390_epoll* lst, struct epoll_event* events,
   int pollret;
   int reventcount;
 
+struct timeval t1, t2;
+printf("JBAR poll size = %d, timeout=%d\n", lst->size, timeout);
   _SET_FDS_MSGS(size, 1, lst->size - 1);
   pfds = lst->items;
+gettimeofday(&t1, NULL);
   pollret = poll(pfds, size, timeout);
+gettimeofday(&t2, NULL);
   if (pollret <= 0)
     return pollret;
 
   pollret = _NFDS(pollret) + _NMSGS(pollret);
+printf("JBAR poll returned = %d, elapsed = %fms\n", pollret,
+   (t2.tv_sec - t1.tv_sec) * 1000.0 + (t2.tv_usec - t1.tv_usec) / 1000.0);
 
   reventcount = 0;
   for (int i = 0; 

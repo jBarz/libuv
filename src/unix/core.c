@@ -314,20 +314,26 @@ int uv_backend_fd(const uv_loop_t* loop) {
 
 
 int uv_backend_timeout(const uv_loop_t* loop) {
+printf("JBAR %s:%d\n", __func__, __LINE__);
   if (loop->stop_flag != 0)
     return 0;
+printf("JBAR %s:%d\n", __func__, __LINE__);
 
   if (!uv__has_active_handles(loop) && !uv__has_active_reqs(loop))
     return 0;
+printf("JBAR %s:%d\n", __func__, __LINE__);
 
   if (!QUEUE_EMPTY(&loop->idle_handles))
     return 0;
+printf("JBAR %s:%d\n", __func__, __LINE__);
 
   if (!QUEUE_EMPTY(&loop->pending_queue))
     return 0;
+printf("JBAR %s:%d\n", __func__, __LINE__);
 
   if (loop->closing_handles)
     return 0;
+printf("JBAR %s:%d\n", __func__, __LINE__);
 
   return uv__next_timeout(loop);
 }

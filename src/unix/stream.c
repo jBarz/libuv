@@ -460,6 +460,7 @@ void uv__stream_flush_write_queue(uv_stream_t* stream, int error) {
 void uv__stream_destroy(uv_stream_t* stream) {
   assert(!uv__io_active(&stream->io_watcher, POLLIN | POLLOUT));
   assert(stream->flags & UV_CLOSED);
+printf("JBAR stream destroy\n");
 
   if (stream->connect_req) {
     uv__req_unregister(stream->loop, stream->connect_req);
@@ -602,6 +603,7 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
   if (server->accepted_fd == -1)
     return UV_EAGAIN;
 
+printf("JBAR accept server=%d, client=%d\n", server->type, client->type);
   switch (client->type) {
     case UV_NAMED_PIPE:
     case UV_TCP:
@@ -613,6 +615,13 @@ int uv_accept(uv_stream_t* server, uv_stream_t* client) {
         uv__close(server->accepted_fd);
         goto done;
       }
+#if defined(__MVS__)
+      if (server->type == UV_NAMED_PIPE && client->type == UV_TCP) {
+printf("JBAR accept tcp fd=%d from pipe fd=%d\n", server->io_watcher.fd, client->io_watcher.fd);
+        //uv__close(server->accepted_fd);
+        //goto done;
+      }
+#endif
       break;
 
     case UV_UDP:
@@ -704,6 +713,7 @@ static void uv__drain(uv_stream_t* stream) {
     err = 0;
     if (shutdown(uv__stream_fd(stream), SHUT_WR))
       err = UV__ERR(errno);
+printf("JBAR shutdown called on fd=%d\n", stream->io_watcher.fd);
 
     if (err == 0)
       stream->flags |= UV_STREAM_SHUT;
@@ -864,8 +874,10 @@ start:
     do {
       if (iovcnt == 1) {
         n = platform_write(req, stream, iov[0].iov_base, iov[0].iov_len);
+printf("JBAR write on fd=%d buflen=%d returned n=%d errno=%d\n", stream->io_watcher.fd, iov[0].iov_len, n, errno);
       } else {
         n = platform_writev(req, stream, iov, iovcnt);
+printf("JBAR writev on fd=%d returned n=%d errno=%d\n", stream->io_watcher.fd, n, errno);
       }
     }
 #if defined(__APPLE__)
@@ -1184,6 +1196,7 @@ static void uv__read(uv_stream_t* stream) {
     if (!is_ipc) {
       do {
         nread = platform_read(stream, buf.base, buf.len);
+printf("JBAR read on fd=%d returned nread=%d errno=%d\n", stream->io_watcher.fd, nread, errno);
       }
       while (nread < 0 && errno == EINTR);
     } else {
@@ -1327,6 +1340,7 @@ int uv_shutdown(uv_shutdown_t* req, uv_stream_t* stream, uv_shutdown_cb cb) {
 
   uv__io_start(stream->loop, &stream->io_watcher, POLLOUT);
   uv__stream_osx_interrupt_select(stream);
+printf("JBAR shutdown fd=%d shutdown req=%p\n", (uv__stream_fd(stream)), stream->shutdown_req);
 
   return 0;
 }
@@ -1640,11 +1654,13 @@ int uv_read_start(uv_stream_t* stream,
   uv__handle_start(stream);
   uv__stream_osx_interrupt_select(stream);
 
+printf("JBAR read start on fd=%d\n", stream->io_watcher.fd);
   return 0;
 }
 
 
 int uv_read_stop(uv_stream_t* stream) {
+printf("JBAR read_stop fd=%d\n", stream->io_watcher.fd);
   if (!(stream->flags & UV_STREAM_READING))
     return 0;
 
@@ -1716,6 +1732,7 @@ void uv__stream_close(uv_stream_t* handle) {
   uv_read_stop(handle);
   uv__handle_stop(handle);
 
+printf("JBAR stream close fd=%d\n", handle->io_watcher.fd);
   if (handle->io_watcher.fd != -1) {
     /* Don't close stdio file descriptors.  Nothing good comes from it. */
     if (handle->io_watcher.fd > STDERR_FILENO)

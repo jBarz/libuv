@@ -669,6 +669,7 @@ void uv__platform_invalidate_fd(uv_loop_t* loop, int fd) {
   aio_cancel.aio_fildes = fd;
   aio_cancel.aio_cflags = AIO_CANCELNONOTIFY;
   BPX4AIO(sizeof(aio_cancel), &aio_cancel, &rv, &rc, &rsn);
+printf("JBAR BPX4AIO Cancel fd=%d\n", fd);
 
   /* Remove the file descriptor from the epoll. */
   if (loop->ep != NULL)
@@ -934,6 +935,7 @@ static int aio_shutdown_message(struct aiocb* aio) {
   req = container_of(aio, uv_shutdown_t, aio);
   handle = req->handle;
   w = &handle->io_watcher;
+printf("JBAR shutdown message fd=%d\n", w->fd);
   
   events = POLLOUT;
   if (aio->aio_rv == -1)
@@ -972,6 +974,7 @@ static int aio_write_message(struct aiocb* aio) {
   req = container_of(aio, uv_write_t, aio);
   handle = req->handle;
   w = &handle->io_watcher;
+printf("JBAR write message fd=%d\n", w->fd);
   
   events = POLLOUT;
   if (aio->aio_rv == -1)
@@ -1089,6 +1092,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   int fd;
   int op;
   int i;
+printf("JBAR iopoll timeout=%d\n", timeout);
 
   if (loop->nfds == 0) {
     assert(QUEUE_EMPTY(&loop->watcher_queue));
@@ -1383,6 +1387,7 @@ int uv__os390_connect(uv_connect_t* req, uv_stream_t* handle,
   aio_connect->aio_sockaddrlen = addrlen;
 
   BPX4AIO(sizeof(req->aio), &req->aio, &rv, &rc, &rsn);
+printf("JBAR BPX4AIO connect rv=%d,rc=%d,rsn=%d\n", rv, rc, rsn);
   if (rv == 0) {
     errno = EINPROGRESS;
     return -1;
@@ -1475,6 +1480,7 @@ int uv__os390_read(uv_stream_t* handle, void* buf, int len) {
   aio_read->aio_cflags |= AIO_OK2COMPIMD;
   aio_read->aio_cflags |= AIO_TCBAFFINITY;
   BPX4AIO(sizeof(*aio_read), aio_read, &rv, &rc, &rsn);
+printf("JBAR BPX4AIO read fd=%d rv=%d,rc=%d,rsn=%d\n", w->fd, rv, rc, rsn);
 
   if (rv != 0) {
     /* Synchronous result. */
@@ -1534,6 +1540,7 @@ static int os390_write(int cmd, uv_write_t* req,
   aio_write->aio_nbytes = len;
 
   BPX4AIO(sizeof(*aio_write), aio_write, &rv, &rc, &rsn);
+printf("JBAR BPX4AIO write on fd=%d rv=%d,rc=%d,rsn=%d\n", w->fd, rv, rc, rsn);
   if (rv == -1) {
     aio_write->aio_cmd = 0;
     errno = rc;

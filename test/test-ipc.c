@@ -689,6 +689,9 @@ int ipc_helper(int listen_after_write) {
   int r;
   uv_buf_t buf;
 
+  freopen("/home/barboza/libuv/log", "w", stdout);
+  freopen("/home/barboza/libuv/log.err", "w", stderr);
+
   ASSERT(0 == uv_ip4_addr("0.0.0.0", TEST_PORT, &addr));
 
   r = uv_pipe_init(uv_default_loop(), &channel, 1);

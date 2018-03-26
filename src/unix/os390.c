@@ -1124,12 +1124,23 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       } aiomsg;
 
       if (w->pevents & POLLOUT) {
+        if (stream->connect_req != NULL) {
+          if (stream->connect_req->aio.aio_cmd != AIO_CONNECT) {
+            /* This is a connect event that had synchronous success. */
+            stream->connect_req->aio.aio_cmd = AIO_CONNECT;
+            aiomsg.type = SIGIO;
+            aiomsg.aio = &stream->connect_req->aio;
+            if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
+              abort();
+          }
+        }
+
         /* This is a shutdown request waiting to be dispatched. */
         if (stream->shutdown_req != NULL && QUEUE_EMPTY(&stream->write_queue)) {
           stream->shutdown_req->aio.aio_cmd = AIO_WRITE;
           aiomsg.type = SIGIO;
           aiomsg.aio = &stream->shutdown_req->aio;
-          if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), 0))
+          if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
             abort();
         }
       }
@@ -1180,7 +1191,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
           aiomsg.type = SIGIO;
           aiomsg.aio = &w->aio;
           stream->delayed_error = rc;
-          if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), 0))
+          if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
             abort();
         }
       }
@@ -1223,8 +1234,11 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
       timeout = max_safe_timeout;
 
+    nevents += os390_message_queue_handler(ep);
+    if (!nevents) {
     nfds = epoll_wait(loop->ep, events,
                       ARRAY_SIZE(events), timeout);
+    }
 
     /* Update loop->time unconditionally. It's tempting to skip the update when
      * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
@@ -1365,6 +1379,7 @@ int uv__os390_connect(uv_connect_t* req, uv_stream_t* handle,
   memset(aio_connect, 0, sizeof(*aio_connect));
   aio_connect->aio_fildes = w->fd;
   aio_connect->aio_notifytype = AIO_MSGQ;
+  aio_connect->aio_cflags = AIO_OK2COMPIMD;
   aio_connect->aio_cmd = AIO_CONNECT;
   aio_connect->aio_msgev_qid = ep->msg_queue;
 
@@ -1383,6 +1398,9 @@ int uv__os390_connect(uv_connect_t* req, uv_stream_t* handle,
   if (rv == 0) {
     errno = EINPROGRESS;
     return -1;
+  } else if (rv == 1) {
+    aio_connect->aio_cmd = 0;
+    return 0;
   } else {
     errno = rc;
     return -1;

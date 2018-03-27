@@ -26,6 +26,7 @@ BENCHMARK_DECLARE (ping_pongs)
 BENCHMARK_DECLARE (tcp_write_batch)
 BENCHMARK_DECLARE (tcp4_pound_100)
 BENCHMARK_DECLARE (tcp4_pound_1000)
+BENCHMARK_DECLARE (tcp4_pound_5000)
 BENCHMARK_DECLARE (pipe_pound_100)
 BENCHMARK_DECLARE (pipe_pound_1000)
 BENCHMARK_DECLARE (tcp_pump100_client)
@@ -104,6 +105,9 @@ TASK_LIST_START
 
   BENCHMARK_ENTRY  (tcp4_pound_1000)
   BENCHMARK_HELPER (tcp4_pound_1000, tcp4_echo_server)
+
+  BENCHMARK_ENTRY  (tcp4_pound_5000)
+  BENCHMARK_HELPER (tcp4_pound_5000, tcp4_echo_server)
 
   BENCHMARK_ENTRY  (pipe_pump100_client)
   BENCHMARK_HELPER (pipe_pump100_client, pipe_pump_server)

@@ -23,7 +23,7 @@
 #include "uv.h"
 
 /* Update this is you're going to run > 1000 concurrent requests. */
-#define MAX_CONNS 1000
+#define MAX_CONNS 5000
 
 #undef NANOSEC
 #define NANOSEC ((uint64_t) 1e9)
@@ -323,6 +323,16 @@ BENCHMARK_IMPL(tcp4_pound_100) {
 
 BENCHMARK_IMPL(tcp4_pound_1000) {
   return pound_it(1000,
+                  "tcp",
+                  tcp_do_setup,
+                  tcp_do_connect,
+                  tcp_make_connect,
+                  NULL);
+}
+
+
+BENCHMARK_IMPL(tcp4_pound_5000) {
+  return pound_it(5000,
                   "tcp",
                   tcp_do_setup,
                   tcp_do_connect,

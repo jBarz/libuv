@@ -24,6 +24,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#if defined(__MVS__)
+# define TCPSOMAXCONN 1024
+#else
+# define TCPSOMAXCONN SOMAXCONN
+#endif
+
 typedef struct {
   uv_write_t req;
   uv_buf_t buf;
@@ -230,7 +236,7 @@ static int tcp4_echo_start(int port) {
     return 1;
   }
 
-  r = uv_listen((uv_stream_t*)&tcpServer, SOMAXCONN, on_connection);
+  r = uv_listen((uv_stream_t*)&tcpServer, TCPSOMAXCONN, on_connection);
   if (r) {
     /* TODO: Error codes */
     fprintf(stderr, "Listen error %s\n", uv_err_name(r));
@@ -265,7 +271,7 @@ static int tcp6_echo_start(int port) {
     return 0;
   }
 
-  r = uv_listen((uv_stream_t*)&tcpServer, SOMAXCONN, on_connection);
+  r = uv_listen((uv_stream_t*)&tcpServer, TCPSOMAXCONN, on_connection);
   if (r) {
     /* TODO: Error codes */
     fprintf(stderr, "Listen error\n");

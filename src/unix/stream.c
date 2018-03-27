@@ -1264,9 +1264,11 @@ static void uv__read(uv_stream_t* stream) {
       /* z/OS is edge-triggered, so we need to rearm the file descriptor
        * and wait for next read event.
        */
-      uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
-      stream->flags |= UV_STREAM_READ_PARTIAL;
-      return;
+      if (stream->flags & UV_STREAM_READING) {
+        uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
+        stream->flags |= UV_STREAM_READ_PARTIAL;
+        return;
+      }
 #endif
 
       /* Return if we didn't fill the buffer, there is no more data to read. */

@@ -1132,7 +1132,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         }
       }
 
-      if (w->pevents & POLLIN) {
+      if (w->pevents & POLLIN && w->aio.aio_cmd != AIO_ACCEPT) {
         /* This is a read/accept request weaiting to be dispatched. */
         int rv;
         int rc;
@@ -1399,8 +1399,11 @@ int uv__os390_listen(uv_stream_t *handle, int backlog) {
   struct aiocb *aio_accept;
   uv__os390_epoll* ep;
   uv__io_t* w;
+  int rv;
+  int rc;
+  int rsn;
 
-  if (listen(handle->io_watcher.fd, backlog)) {
+  if (listen(handle->io_watcher.fd, 128)) {
     return -1;
   }
 
@@ -1412,25 +1415,51 @@ int uv__os390_listen(uv_stream_t *handle, int backlog) {
   aio_accept->aio_notifytype = AIO_MSGQ;
   aio_accept->aio_cmd = AIO_ACCEPT;
   aio_accept->aio_msgev_qid = ep->msg_queue;
+
+  BPX4AIO(sizeof(*aio_accept), aio_accept, &rv, &rc, &rsn);
+  if (rv == -1) {
+    /* Error. */
+    errno = rc;
+    return -1;
+  }
+
+  /* Asynchronous accept dispatched. */
   return 0;
 }
 
 
 int uv__os390_accept(uv_stream_t *handle) {
   uv__io_t* w;
+  struct aiocb* aio_accept;
+  int previous_rv;
+  int rv;
+  int rc;
+  int rsn;
 
   if (handle->type != UV_TCP)
     return uv__accept(uv__stream_fd(handle));
 
   w = &handle->io_watcher;
-  if (w->aio.aio_cmd != AIO_ACCEPT)
+  aio_accept = &w->aio;
+  if (aio_accept->aio_cmd != AIO_ACCEPT)
     return -EINVAL;
 
-  if (w->aio.aio_rc == EINPROGRESS)
+  if (aio_accept->aio_rc == EINPROGRESS)
     return -EWOULDBLOCK;
 
-  w->aio.aio_rc = EINPROGRESS;
-  return w->aio.aio_rv;
+  if (aio_accept->aio_rv == -1)
+    return -aio_accept->aio_rc;
+
+  previous_rv = aio_accept->aio_rv;;
+  aio_accept->aio_cflags = AIO_OK2COMPIMD;
+  BPX4AIO(sizeof(*aio_accept), aio_accept, &rv, &rc, &rsn);
+  if (rv == -1) {
+    /* Error. */
+    errno = rc;
+    return -1;
+  }
+
+  return previous_rv;
 }
 
 

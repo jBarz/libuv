@@ -1260,17 +1260,20 @@ static void uv__read(uv_stream_t* stream) {
 #endif
       stream->read_cb(stream, nread, &buf);
 
+#if defined(__MVS__)
+      /* z/OS is edge-triggered, so we need to rearm the file descriptor
+       * and wait for next read event.
+       */
+      uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
+      stream->flags |= UV_STREAM_READ_PARTIAL;
+      return;
+#endif
+
       /* Return if we didn't fill the buffer, there is no more data to read. */
       if (nread < buflen) {
         stream->flags |= UV_STREAM_READ_PARTIAL;
         return;
       }
-
-#ifdef __MVS__
-      /* On z/OS, we can only do one read per loop. */
-      stream->flags |= UV_STREAM_READ_PARTIAL;
-      return;
-#endif
     }
   }
 }

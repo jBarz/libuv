@@ -42,7 +42,7 @@
 #define UV_WRITE_PRIVATE_PLATFORM_FIELDS                                      \
   struct aiocb aio;                                                           \
 
-#define UV_SHUTDOWN_PRIVATE_PLATFORM_FIELDS                                      \
+#define UV_SHUTDOWN_PRIVATE_PLATFORM_FIELDS                                   \
   struct aiocb aio;                                                           \
 
 #endif /* UV_MVS_H */

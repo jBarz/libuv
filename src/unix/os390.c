@@ -880,19 +880,6 @@ static int aio_read_message(struct aiocb *aio) {
 
   /* Restore alloc_cb */
   handle->alloc_cb = alloc_cb;
-
-  /* Nullify the aio buffer so that a new buffer is allocated for the
-   * the next uv__io_poll.
-   */
-  aio->aio_buf = NULL;
-  aio->aio_nbytes = 0;
-
-  /* The callback resulted in a partial read. So trigger the next read
-   * on the next uv__io_poll.
-   */
-  if (watcher->fd >= 0 && handle->flags & UV_STREAM_READ_PARTIAL)
-    uv__io_start(handle->loop, watcher, POLLIN);
-
   return 0;
 }
 
@@ -1236,8 +1223,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
     nevents += os390_message_queue_handler(ep);
     if (!nevents) {
-    nfds = epoll_wait(loop->ep, events,
-                      ARRAY_SIZE(events), timeout);
+      nfds = epoll_wait(loop->ep, events,
+                        ARRAY_SIZE(events), timeout);
     }
 
     /* Update loop->time unconditionally. It's tempting to skip the update when
@@ -1485,7 +1472,8 @@ int uv__os390_read(uv_stream_t* handle, void* buf, int len) {
   assert(buf == aio_read->aio_buf);
   assert(len == aio_read->aio_nbytes);
 
-  aio_read->aio_rc = EINPROGRESS;
+  aio_read->aio_buf = NULL;
+  aio_read->aio_nbytes = 0;
   return aio_read->aio_rv;
 }
 

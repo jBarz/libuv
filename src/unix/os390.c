@@ -1107,7 +1107,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
        */
       struct {
         long int type;
-        void* aio;
+        struct aiocb* aio;
       } aiomsg;
 
       if (w->pevents & POLLOUT) {
@@ -1132,7 +1132,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         }
       }
 
-      if (w->pevents & POLLIN && w->aio.aio_cmd != AIO_ACCEPT) {
+      if (w->pevents & POLLIN) {
         /* This is a read/accept request weaiting to be dispatched. */
         int rv;
         int rc;
@@ -1168,16 +1168,23 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
             /* A read request with a buffer. In process. */
             dispatch = 0;
           }
-        }
+          if (dispatch) {
+            BPX4AIO(sizeof(w->aio), &w->aio, &rv, &rc, &rsn);
+          }
 
-        if (dispatch)
-          BPX4AIO(sizeof(w->aio), &w->aio, &rv, &rc, &rsn);
-
-        if (rv) {
-          /* Error. Notify on message queue. */
+          if (rv) {
+            /* Error. Notify on message queue. */
+            aiomsg.type = SIGIO;
+            aiomsg.aio = &w->aio;
+            stream->delayed_error = rc;
+            if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
+              abort();
+          }
+        } else if (w->aio.aio_cmd == AIO_ACCEPT && w->aio.aio_fildes == -1) {
+          /* The last accept finished synchronously. So don't dispatch a new request. Just notify. */
           aiomsg.type = SIGIO;
           aiomsg.aio = &w->aio;
-          stream->delayed_error = rc;
+          aiomsg.aio->aio_fildes = w->fd;
           if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
             abort();
         }
@@ -1221,11 +1228,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
       timeout = max_safe_timeout;
 
-    nevents += os390_message_queue_handler(ep);
-    if (!nevents) {
-      nfds = epoll_wait(loop->ep, events,
-                        ARRAY_SIZE(events), timeout);
-    }
+    nfds = epoll_wait(loop->ep, events,
+                      ARRAY_SIZE(events), timeout);
 
     /* Update loop->time unconditionally. It's tempting to skip the update when
      * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
@@ -1457,6 +1461,9 @@ int uv__os390_accept(uv_stream_t *handle) {
   if (aio_accept->aio_rv == -1)
     return -aio_accept->aio_rc;
 
+  if (aio_accept->aio_fildes = -1)
+    aio_accept->aio_fildes = w->fd;
+
   previous_rv = aio_accept->aio_rv;;
   aio_accept->aio_cflags = AIO_OK2COMPIMD;
   BPX4AIO(sizeof(*aio_accept), aio_accept, &rv, &rc, &rsn);
@@ -1464,6 +1471,9 @@ int uv__os390_accept(uv_stream_t *handle) {
     /* Error. */
     errno = rc;
     return -1;
+  } else if (rv == 1) {
+    /* Indicate that the last call was a synchronous success. */
+    aio_accept->aio_fildes = -1;
   }
 
   return previous_rv;

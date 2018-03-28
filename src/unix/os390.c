@@ -1231,34 +1231,37 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
      * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
      * operating system didn't reschedule our process while in the syscall.
      */
-    base = loop->time;
     SAVE_ERRNO(uv__update_time(loop));
     if (nfds == 0) {
       assert(timeout != -1);
 
-      if (timeout > 0) {
-        timeout = real_timeout - timeout;
-        continue;
-      }
+      /* No wait poll returned without activity. */
+      if (timeout == 0)
+        return;
 
-      return;
+      /* We may have been inside the system call for longer than |timeout|
+       * milliseconds so we need to update the timestamp to avoid drift.
+       */
+      goto update_timeout;
     }
 
     if (nfds == -1) {
 
+      /* Error from poll. */
       if (errno != EINTR)
         abort();
 
+      /* Signal interruption during indefinite wait. */
       if (timeout == -1)
         continue;
 
+      /* Signal interruption during no wait. */
       if (timeout == 0)
         return;
 
       /* Interrupted by a signal. Update timeout and poll again. */
       goto update_timeout;
     }
-
 
     assert(loop->watchers != NULL);
     loop->watchers[loop->nwatchers] = (void*) events;
@@ -1309,17 +1312,21 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     loop->watchers[loop->nwatchers + 1] = NULL;
 
     if (nevents != 0) {
+      /* Too much activity. Handle more events without blocking. */
       if (nfds == ARRAY_SIZE(events) && --count != 0) {
-        /* Poll for more events but don't block this time. */
         timeout = 0;
         continue;
       }
+
+      /* Handled all active events. */
       return;
     }
 
+    /* Stale events found without blocking. */
     if (timeout == 0)
       return;
 
+    /* Stale events found while waiting indefinitely. */
     if (timeout == -1)
       continue;
 

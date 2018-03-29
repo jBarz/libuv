@@ -1007,9 +1007,42 @@ static int aio_write_message(struct aiocb* aio) {
 }
 
 
-static int os390_message_queue_handler(uv__os390_epoll* ep) {
-  int msglen;
-  int nevents;
+static int os390_message_queue_handler(void* ptr) {
+  union msgtype {
+    long int type;
+    _RFIM rfim;
+    struct {
+      long int type;
+      struct aiocb* aio;
+    } aiomsg;
+  };
+
+  union msgtype* msg = (union msgtype*)ptr;
+  if (msg->type == SIGIO) {
+    if (msg->aiomsg.aio->aio_cmd == AIO_WRITE) {
+      if (msg->aiomsg.aio->aio_buf == NULL)
+        return aio_shutdown_message(msg->aiomsg.aio);
+      else
+        return aio_write_message(msg->aiomsg.aio);
+    }
+    else if (msg->aiomsg.aio->aio_cmd == AIO_WRITEV) 
+      return aio_write_message(msg->aiomsg.aio);
+    else if (msg->aiomsg.aio->aio_cmd == AIO_CONNECT)
+      return aio_connect_message(msg->aiomsg.aio);
+    else if (msg->aiomsg.aio->aio_cmd == AIO_ACCEPT)
+      return aio_accept_message(msg->aiomsg.aio);
+    else if (msg->aiomsg.aio->aio_cmd == AIO_READ)
+      return aio_read_message(msg->aiomsg.aio);
+  } else {
+    /* File interest event */
+    return fs_event_message(&msg->rfim);
+  }
+}
+
+
+void uv__io_poll(uv_loop_t* loop, int timeout) {
+  static const int max_safe_timeout = 1789569;
+  struct epoll_event events[1024];
   union {
     long int type;
     _RFIM rfim;
@@ -1017,56 +1050,7 @@ static int os390_message_queue_handler(uv__os390_epoll* ep) {
       long int type;
       struct aiocb* aio;
     } aiomsg;
-  } msg;
-
-  if (ep->msg_queue == -1)
-    return 0;
-
-  nevents = 0;
-  for (;;) {
-    msglen = msgrcv(ep->msg_queue, &msg, sizeof(msg), 0, IPC_NOWAIT);
-
-    if (msglen == -1 && errno == ENOMSG)
-      return nevents;
-
-    if (msglen == -1)
-      abort();
-
-    if (msg.type == SIGIO) {
-      if (msg.aiomsg.aio->aio_cmd == AIO_WRITE) {
-        if (msg.aiomsg.aio->aio_buf == NULL) {
-          if (aio_shutdown_message(msg.aiomsg.aio) == 0)
-            ++nevents;
-        } else if (aio_write_message(msg.aiomsg.aio) == 0)
-          ++nevents;
-      } else if (msg.aiomsg.aio->aio_cmd == AIO_WRITEV) {
-        if (aio_write_message(msg.aiomsg.aio) == 0)
-          ++nevents;
-      } else if (msg.aiomsg.aio->aio_cmd == AIO_CONNECT) {
-        if (aio_connect_message(msg.aiomsg.aio) == 0)
-          ++nevents;
-      } else if (msg.aiomsg.aio->aio_cmd == AIO_ACCEPT) {
-        if (aio_accept_message(msg.aiomsg.aio) == 0)
-          ++nevents;
-      } else if (msg.aiomsg.aio->aio_cmd == AIO_READ) {
-        if (aio_read_message(msg.aiomsg.aio) == 0)
-          ++nevents;
-      }
-    } else {
-      /* File interest event */
-      if (fs_event_message(&msg.rfim) == 0)
-        ++nevents;
-    }
-  }
-
-  /* Return total number of events handled */
-  return nevents;
-}
-
-
-void uv__io_poll(uv_loop_t* loop, int timeout) {
-  static const int max_safe_timeout = 1789569;
-  struct epoll_event events[1024];
+  } msgs[128];
   struct epoll_event* pe;
   struct epoll_event e;
   uv__os390_epoll* ep;
@@ -1074,6 +1058,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   QUEUE* q;
   uv__io_t* w;
   uint64_t base;
+  int nmsgs;
   int count;
   int nfds;
   int fd;
@@ -1086,6 +1071,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   }
 
   ep = loop->ep;
+  nmsgs = 0;
   while (!QUEUE_EMPTY(&loop->watcher_queue)) {
     uv_stream_t* stream;
 
@@ -1105,30 +1091,22 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       /* Don't use epoll. The write and connect calls have already been
        * dispatched via BPX4AIO. Wait for them to pop up on message queue.
        */
-      struct {
-        long int type;
-        struct aiocb* aio;
-      } aiomsg;
 
       if (w->pevents & POLLOUT) {
         if (stream->connect_req != NULL) {
           if (stream->connect_req->aio.aio_cmd != AIO_CONNECT) {
             /* This is a connect event that had synchronous success. */
             stream->connect_req->aio.aio_cmd = AIO_CONNECT;
-            aiomsg.type = SIGIO;
-            aiomsg.aio = &stream->connect_req->aio;
-            if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
-              abort();
+            msgs[nmsgs].aiomsg.type = SIGIO;
+            msgs[nmsgs++].aiomsg.aio = &stream->connect_req->aio;
           }
         }
 
         /* This is a shutdown request waiting to be dispatched. */
         if (stream->shutdown_req != NULL && QUEUE_EMPTY(&stream->write_queue)) {
           stream->shutdown_req->aio.aio_cmd = AIO_WRITE;
-          aiomsg.type = SIGIO;
-          aiomsg.aio = &stream->shutdown_req->aio;
-          if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
-            abort();
+          msgs[nmsgs].aiomsg.type = SIGIO;
+          msgs[nmsgs++].aiomsg.aio = &stream->shutdown_req->aio;
         }
       }
 
@@ -1174,19 +1152,15 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
           if (rv) {
             /* Error. Notify on message queue. */
-            aiomsg.type = SIGIO;
-            aiomsg.aio = &w->aio;
+            msgs[nmsgs].aiomsg.type = SIGIO;
+            msgs[nmsgs++].aiomsg.aio = &w->aio;
             stream->delayed_error = rc;
-            if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
-              abort();
           }
         } else if (w->aio.aio_cmd == AIO_ACCEPT && w->aio.aio_fildes == -1) {
           /* The last accept finished synchronously. So don't dispatch a new request. Just notify. */
-          aiomsg.type = SIGIO;
-          aiomsg.aio = &w->aio;
-          aiomsg.aio->aio_fildes = w->fd;
-          if (msgsnd(ep->msg_queue, &aiomsg, sizeof(void*), IPC_NOWAIT))
-            abort();
+          msgs[nmsgs].aiomsg.type = SIGIO;
+          msgs[nmsgs++].aiomsg.aio = &w->aio;
+          w->aio.aio_fildes = w->fd;
         }
       }
     } else {
@@ -1227,6 +1201,14 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   for (;;) {
     if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
       timeout = max_safe_timeout;
+
+    /* Handle all of the synchronous event msgs first. */
+    for (int i = 0; i < nmsgs; ++i) {
+      if (os390_message_queue_handler(&msgs[i]) == 0) {
+        ++nevents;
+        timeout = 0;
+      }
+    }
 
     nfds = epoll_wait(loop->ep, events,
                       ARRAY_SIZE(events), timeout);
@@ -1279,7 +1261,25 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         continue;
 
       if (fd == ep->msg_queue) {
-        nevents += os390_message_queue_handler(ep);
+        union {
+          long int type;
+          _RFIM rfim;
+          struct {
+            long int type;
+            struct aiocb* aio;
+          } aiomsg;
+        } msg;
+
+        for (;;) {
+          int msglen = msgrcv(ep->msg_queue, &msg, sizeof(msg), 0, IPC_NOWAIT);
+          if (msglen == -1 && errno == ENOMSG)
+            break;
+          if (msglen == -1)
+            abort();
+          if (os390_message_queue_handler(&msg) == 0)
+            ++nevents;
+        }
+
       } else {
         assert(fd >= 0);
         assert((unsigned) fd < loop->nwatchers);

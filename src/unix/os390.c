@@ -871,15 +871,8 @@ static int aio_read_message(struct aiocb *aio) {
   if (events == POLLERR)
     events |= watcher->pevents & (POLLIN | POLLOUT);
 
-  /* Override alloc_cb */
-  alloc_cb = handle->alloc_cb;
-  handle->alloc_cb = uv__os390_alloc;
-
   /* Call callback */
   watcher->cb(handle->loop, watcher, events);
-
-  /* Restore alloc_cb */
-  handle->alloc_cb = alloc_cb;
   return 0;
 }
 
@@ -1050,7 +1043,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       long int type;
       struct aiocb* aio;
     } aiomsg;
-  } msgs[128];
+  } msg;
+  int handled_synchronous_event;
   struct epoll_event* pe;
   struct epoll_event e;
   uv__os390_epoll* ep;
@@ -1058,7 +1052,6 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   QUEUE* q;
   uv__io_t* w;
   uint64_t base;
-  int nmsgs;
   int count;
   int nfds;
   int fd;
@@ -1071,7 +1064,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   }
 
   ep = loop->ep;
-  nmsgs = 0;
+  handled_synchronous_event = 0;
   while (!QUEUE_EMPTY(&loop->watcher_queue)) {
     uv_stream_t* stream;
 
@@ -1097,71 +1090,34 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
           if (stream->connect_req->aio.aio_cmd != AIO_CONNECT) {
             /* This is a connect event that had synchronous success. */
             stream->connect_req->aio.aio_cmd = AIO_CONNECT;
-            msgs[nmsgs].aiomsg.type = SIGIO;
-            msgs[nmsgs++].aiomsg.aio = &stream->connect_req->aio;
+            msg.aiomsg.type = SIGIO;
+            msg.aiomsg.aio = &stream->connect_req->aio;
+            os390_message_queue_handler(&msg);
+            handled_synchronous_event = 1;
           }
         }
 
         /* This is a shutdown request waiting to be dispatched. */
         if (stream->shutdown_req != NULL && QUEUE_EMPTY(&stream->write_queue)) {
           stream->shutdown_req->aio.aio_cmd = AIO_WRITE;
-          msgs[nmsgs].aiomsg.type = SIGIO;
-          msgs[nmsgs++].aiomsg.aio = &stream->shutdown_req->aio;
+          msg.aiomsg.type = SIGIO;
+          msg.aiomsg.aio = &stream->shutdown_req->aio;
+          os390_message_queue_handler(&msg);
+          handled_synchronous_event = 1;
         }
       }
 
       if (w->pevents & POLLIN) {
-        /* This is a read/accept request weaiting to be dispatched. */
-        int rv;
-        int rc;
-        int rsn;
-        int dispatch;
-        uv_buf_t buf;
+        /* This is a read request weaiting to be dispatched. */
+        w->aio.aio_cmd = stream->flags & UV_STREAM_READING ? AIO_READ : AIO_ACCEPT;
+        w->aio.aio_fildes = w->fd;
+        w->aio.aio_notifytype = AIO_MSGQ;
+        w->aio.aio_msgev_qid = ep->msg_queue;
 
-        rv = 0;
-        dispatch = 1;
-        if (w->aio.aio_cmd == 0) {
-          /* An initial read request. Fill in the aiocb. */
-          /* An accept request is already filled up by uv__os390_listen. */
-          w->aio.aio_fildes = w->fd;
-          w->aio.aio_notifytype = AIO_MSGQ;
-          w->aio.aio_cmd = AIO_READ;
-          w->aio.aio_msgev_qid = ep->msg_queue;
-        }
-
-        if (w->aio.aio_cmd == AIO_READ) {
-          if (w->aio.aio_buf == NULL) {
-            /* A read request without a buffer. Create one. */
-            buf = uv_buf_init(NULL, 0);
-            stream->alloc_cb((uv_handle_t*)stream, 64 * 1024, &buf);
-            w->aio.aio_buf = buf.base;
-            w->aio.aio_nbytes = buf.len;
-            if (buf.base == NULL || buf.len == 0) {
-              /* User indicates it can't or won't handle the read. */
-              dispatch = 0;
-              rc = ENOBUFS;
-              rv = -1;
-            } 
-          } else {
-            /* A read request with a buffer. In process. */
-            dispatch = 0;
-          }
-          if (dispatch) {
-            BPX4AIO(sizeof(w->aio), &w->aio, &rv, &rc, &rsn);
-          }
-
-          if (rv) {
-            /* Error. Notify on message queue. */
-            msgs[nmsgs].aiomsg.type = SIGIO;
-            msgs[nmsgs++].aiomsg.aio = &w->aio;
-            stream->delayed_error = rc;
-          }
-        } else if (w->aio.aio_cmd == AIO_ACCEPT && w->aio.aio_fildes == -1) {
-          /* The last accept finished synchronously. So don't dispatch a new request. Just notify. */
-          msgs[nmsgs].aiomsg.type = SIGIO;
-          msgs[nmsgs++].aiomsg.aio = &w->aio;
-          w->aio.aio_fildes = w->fd;
-        }
+        msg.aiomsg.type = SIGIO;
+        msg.aiomsg.aio = &w->aio;
+        os390_message_queue_handler(&msg);
+        handled_synchronous_event = 1;
       }
     } else {
       /* Register this event to be polled. */
@@ -1202,13 +1158,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
       timeout = max_safe_timeout;
 
-    /* Handle all of the synchronous event msgs first. */
-    for (int i = 0; i < nmsgs; ++i) {
-      if (os390_message_queue_handler(&msgs[i]) == 0) {
-        ++nevents;
-        timeout = 0;
-      }
-    }
+    if (handled_synchronous_event && timeout == -1)
+      timeout = 0;
 
     nfds = epoll_wait(loop->ep, events,
                       ARRAY_SIZE(events), timeout);
@@ -1406,39 +1357,6 @@ int uv__os390_connect(uv_connect_t* req, uv_stream_t* handle,
 }
 
 
-int uv__os390_listen(uv_stream_t *handle, int backlog) {
-  struct aiocb *aio_accept;
-  uv__os390_epoll* ep;
-  uv__io_t* w;
-  int rv;
-  int rc;
-  int rsn;
-
-  if (listen(handle->io_watcher.fd, 128)) {
-    return -1;
-  }
-
-  w = &handle->io_watcher;
-  ep = handle->loop->ep;
-  aio_accept = &w->aio;
-  memset(aio_accept, 0, sizeof(struct aiocb));
-  aio_accept->aio_fildes = w->fd;
-  aio_accept->aio_notifytype = AIO_MSGQ;
-  aio_accept->aio_cmd = AIO_ACCEPT;
-  aio_accept->aio_msgev_qid = ep->msg_queue;
-
-  BPX4AIO(sizeof(*aio_accept), aio_accept, &rv, &rc, &rsn);
-  if (rv == -1) {
-    /* Error. */
-    errno = rc;
-    return -1;
-  }
-
-  /* Asynchronous accept dispatched. */
-  return 0;
-}
-
-
 int uv__os390_accept(uv_stream_t *handle) {
   uv__io_t* w;
   struct aiocb* aio_accept;
@@ -1452,31 +1370,31 @@ int uv__os390_accept(uv_stream_t *handle) {
 
   w = &handle->io_watcher;
   aio_accept = &w->aio;
-  if (aio_accept->aio_cmd != AIO_ACCEPT)
-    return -EINVAL;
-
   if (aio_accept->aio_rc == EINPROGRESS)
     return -EWOULDBLOCK;
 
-  if (aio_accept->aio_rv == -1)
-    return -aio_accept->aio_rc;
+  if (aio_accept->aio_cflags & AIO_OK2COMPIMD) {
+    /* This is a notification. */
+    aio_accept->aio_cflags &= ~AIO_OK2COMPIMD;
+    if (aio_accept->aio_rv == -1)
+      return -aio_accept->aio_rc;
+    return aio_accept->aio_rv;
+  }
 
-  if (aio_accept->aio_fildes = -1)
-    aio_accept->aio_fildes = w->fd;
-
-  previous_rv = aio_accept->aio_rv;;
   aio_accept->aio_cflags = AIO_OK2COMPIMD;
   BPX4AIO(sizeof(*aio_accept), aio_accept, &rv, &rc, &rsn);
   if (rv == -1) {
     /* Error. */
-    errno = rc;
-    return -1;
-  } else if (rv == 1) {
-    /* Indicate that the last call was a synchronous success. */
-    aio_accept->aio_fildes = -1;
+    aio_accept->aio_cflags &= ~AIO_OK2COMPIMD;
+    return -rc;
+  } else if (rv == 0) {
+    return -EWOULDBLOCK;
   }
 
-  return previous_rv;
+  /* Synchronous call. */
+  aio_accept->aio_cflags &= ~AIO_OK2COMPIMD;
+  return aio_accept->aio_rv;
+
 }
 
 
@@ -1485,42 +1403,52 @@ int uv__os390_read(uv_stream_t* handle, void* buf, int len) {
   struct aiocb* aio_read;
   uv__io_t* w;
   int rv;
+  int rc;
+  int rsn;
 
   if (handle->type != UV_TCP)
     return read(uv__stream_fd(handle), buf, len);
-
-  if (handle->delayed_error) {
-    /* The read request failed when we previously tried to
-     * dispatch it.
-     */
-    errno = handle->delayed_error;
-    return -1;
-  }
 
   ep = handle->loop->ep;
   w = &handle->io_watcher;
   aio_read = &w->aio;
   if (aio_read->aio_rc == EINPROGRESS) {
     /* The read request is in process. */
-    errno = EWOULDBLOCK;
+    errno = EINPROGRESS;
     return -1;
-  } else if (aio_read->aio_buf == NULL) {
-    /* A new read request first needs to be dispatched. */
-    errno = EWOULDBLOCK;
-    return -1;
-  } else if (aio_read->aio_rv == -1) {
-    /* The notification has been received due to an error. */
-    errno = aio_read->aio_rc;
-    return -1;
+  } else if (aio_read->aio_buf != NULL) {
+    /* The notification has been received. */
+    assert(buf == aio_read->aio_buf);
+    assert(len == aio_read->aio_nbytes);
+    aio_read->aio_buf = NULL;
+    aio_read->aio_nbytes = 0;
+    handle->alloc_cb = (uv_alloc_cb*)(w->stream_alloc_cb);
+    w->stream_alloc_cb = NULL;
+    if (aio_read->aio_rv == -1)
+      errno = aio_read->aio_rc;
+    return aio_read->aio_rv;
   }
 
-  /* Notification has been received for a successful read. */
-  assert(buf == aio_read->aio_buf);
-  assert(len == aio_read->aio_nbytes);
+  /* A new read request first needs to be dispatched. */
+  aio_read->aio_buf = buf;
+  aio_read->aio_nbytes = len;
+  BPX4AIO(sizeof(*aio_read), aio_read, &rv, &rc, &rsn);
 
-  aio_read->aio_buf = NULL;
-  aio_read->aio_nbytes = 0;
-  return aio_read->aio_rv;
+  if (rv != 0) {
+    /* Synchronous result. */
+    aio_read->aio_buf = NULL;
+    aio_read->aio_nbytes = 0;
+    if (rv == -1)
+      errno = rc;
+    return rv;
+  }
+
+  /* Asynchronous read in progress. */
+  w->stream_alloc_cb = handle->alloc_cb;
+  handle->alloc_cb = uv__os390_alloc;
+  errno = EINPROGRESS;
+  return -1;
+
 }
 
 

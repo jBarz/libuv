@@ -30,15 +30,11 @@
 #ifdef __MVS__
 # define platform_connect(req, handle, addr, addrlen) \
          uv__os390_connect(req, handle, addr, addrlen)
-# define platform_listen(handle, backlog) \
-         uv__os390_listen(handle, backlog)
 # define  uv__socket(domain, type, protocol) \
           socket(domain, type, protocol)
 #else
 # define platform_connect(req, handle, addr, addrlen) \
          connect(uv__stream_fd(handle), addr, addrlen)
-# define platform_listen(handle, backlog) \
-         listen(uv__stream_fd(handle), backlog)
 #endif
 
 
@@ -359,7 +355,7 @@ int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb) {
   if (err)
     return err;
 
-  if (platform_listen(tcp, backlog))
+  if (listen(uv__stream_fd(tcp), backlog))
     return UV__ERR(errno);
 
   tcp->connection_cb = cb;

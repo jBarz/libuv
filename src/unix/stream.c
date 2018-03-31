@@ -536,7 +536,9 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(stream->accepted_fd == -1);
   assert(!(stream->flags & UV_CLOSING));
 
+#ifndef __MVS__
   uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
+#endif
 
   /* connection_cb can close the server socket while we're
    * in the loop so check it on each iteration.
@@ -1207,6 +1209,10 @@ static void uv__read(uv_stream_t* stream) {
       } else if (errno == ECONNRESET && stream->type == UV_NAMED_PIPE) {
         uv__stream_eof(stream, &buf);
         return;
+#elif defined(__MVS__)
+      } else if (errno == EINPROGRESS && stream->type == UV_TCP) {
+        stream->flags |= UV_STREAM_READ_PARTIAL;
+        return;
 #endif
       } else {
         /* Error. User should call uv_close(). */
@@ -1260,19 +1266,12 @@ static void uv__read(uv_stream_t* stream) {
 #endif
       stream->read_cb(stream, nread, &buf);
 
-#if defined(__MVS__)
-      /* z/OS is edge-triggered, so we need to rearm the file descriptor
-       * and wait for next read event.
-       */
-      if (stream->flags & UV_STREAM_READING) {
-        uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
-        stream->flags |= UV_STREAM_READ_PARTIAL;
-        return;
-      }
-#endif
-
       /* Return if we didn't fill the buffer, there is no more data to read. */
+#ifdef __MVS__
+      if (nread < buflen && stream->type != UV_TCP) {
+#else
       if (nread < buflen) {
+#endif
         stream->flags |= UV_STREAM_READ_PARTIAL;
         return;
       }

@@ -38,6 +38,8 @@
 
 #define UV_IO_PRIVATE_PLATFORM_FIELDS                                         \
   struct aiocb aio;                                                           \
+  void* stream_alloc_cb;                                                      \
+  
 
 #define UV_WRITE_PRIVATE_PLATFORM_FIELDS                                      \
   struct aiocb aio;                                                           \

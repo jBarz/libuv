@@ -1395,8 +1395,14 @@ static void uv__stream_connect(uv_stream_t* stream) {
     error = stream->delayed_error;
     stream->delayed_error = 0;
   } else {
-    /* Normal situation: we need to get the socket error from the kernel. */
     assert(uv__stream_fd(stream) >= 0);
+#if defined(__MVS__)
+    /* Get status from aiocb. */
+    if (stream->type == UV_TCP && req->aio.aio_rc == EINPROGRESS || req->aio.aio_rv == -1)
+      error = req->aio.aio_rc;
+    else
+#endif
+    /* Normal situation: we need to get the socket error from the kernel. */
     getsockopt(uv__stream_fd(stream),
                SOL_SOCKET,
                SO_ERROR,

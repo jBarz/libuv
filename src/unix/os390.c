@@ -1432,10 +1432,12 @@ int uv__os390_read(uv_stream_t* handle, void* buf, int len) {
   /* A new read request first needs to be dispatched. */
   aio_read->aio_buf = buf;
   aio_read->aio_nbytes = len;
+  aio_read->aio_cflags &= AIO_OK2COMPIMD;
   BPX4AIO(sizeof(*aio_read), aio_read, &rv, &rc, &rsn);
 
   if (rv != 0) {
     /* Synchronous result. */
+    aio_read->aio_cflags &= ~AIO_OK2COMPIMD;
     aio_read->aio_buf = NULL;
     aio_read->aio_nbytes = 0;
     if (rv == -1)

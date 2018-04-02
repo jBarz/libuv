@@ -1280,6 +1280,12 @@ static void uv__read(uv_stream_t* stream) {
       }
     }
   }
+
+#ifdef __MVS__
+  /* We're not done. Trigger the next read call. */
+  if (stream->type == UV_TCP && stream->flags & UV_STREAM_READING)
+    uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
+#endif
 }
 
 

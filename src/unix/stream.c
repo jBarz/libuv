@@ -536,7 +536,10 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events) {
   assert(stream->accepted_fd == -1);
   assert(!(stream->flags & UV_CLOSING));
 
-#ifndef __MVS__
+#ifdef __MVS__
+  if (stream->type != UV_TCP)
+    uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
+#else
   uv__io_start(stream->loop, &stream->io_watcher, POLLIN);
 #endif
 

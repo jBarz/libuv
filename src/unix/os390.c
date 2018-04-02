@@ -1092,8 +1092,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
             stream->connect_req->aio.aio_cmd = AIO_CONNECT;
             msg.aiomsg.type = SIGIO;
             msg.aiomsg.aio = &stream->connect_req->aio;
-            os390_message_queue_handler(&msg);
-            handled_synchronous_event = 1;
+            if (os390_message_queue_handler(&msg) == 0)
+              handled_synchronous_event = 1;
           }
         }
 
@@ -1102,8 +1102,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
           stream->shutdown_req->aio.aio_cmd = AIO_WRITE;
           msg.aiomsg.type = SIGIO;
           msg.aiomsg.aio = &stream->shutdown_req->aio;
-          os390_message_queue_handler(&msg);
-          handled_synchronous_event = 1;
+          if (os390_message_queue_handler(&msg) == 0)
+            handled_synchronous_event = 1;
         }
       }
 
@@ -1116,8 +1116,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
 
         msg.aiomsg.type = SIGIO;
         msg.aiomsg.aio = &w->aio;
-        os390_message_queue_handler(&msg);
-        handled_synchronous_event = 1;
+        if (os390_message_queue_handler(&msg) == 0)
+          handled_synchronous_event = 1;
       }
     } else {
       /* Register this event to be polled. */
@@ -1328,7 +1328,7 @@ int uv__os390_connect(uv_connect_t* req, uv_stream_t* handle,
   memset(aio_connect, 0, sizeof(*aio_connect));
   aio_connect->aio_fildes = w->fd;
   aio_connect->aio_notifytype = AIO_MSGQ;
-  aio_connect->aio_cflags = AIO_OK2COMPIMD;
+  aio_connect->aio_cflags |= AIO_OK2COMPIMD;
   aio_connect->aio_cmd = AIO_CONNECT;
   aio_connect->aio_msgev_qid = ep->msg_queue;
 
@@ -1381,7 +1381,7 @@ int uv__os390_accept(uv_stream_t *handle) {
     return aio_accept->aio_rv;
   }
 
-  aio_accept->aio_cflags = AIO_OK2COMPIMD;
+  aio_accept->aio_cflags |= AIO_OK2COMPIMD;
   BPX4AIO(sizeof(*aio_accept), aio_accept, &rv, &rc, &rsn);
   if (rv == -1) {
     /* Error. */
@@ -1432,7 +1432,7 @@ int uv__os390_read(uv_stream_t* handle, void* buf, int len) {
   /* A new read request first needs to be dispatched. */
   aio_read->aio_buf = buf;
   aio_read->aio_nbytes = len;
-  aio_read->aio_cflags &= AIO_OK2COMPIMD;
+  aio_read->aio_cflags |= AIO_OK2COMPIMD;
   BPX4AIO(sizeof(*aio_read), aio_read, &rv, &rc, &rsn);
 
   if (rv != 0) {
@@ -1442,7 +1442,7 @@ int uv__os390_read(uv_stream_t* handle, void* buf, int len) {
     aio_read->aio_nbytes = 0;
     if (rv == -1)
       errno = rc;
-    return rv;
+    return rv == 1 ? aio_read->aio_rv : -1;
   }
 
   /* Asynchronous read in progress. */
@@ -1485,7 +1485,7 @@ static int os390_write(int cmd, uv_write_t* req,
   memset(aio_write, 0, sizeof(*aio_write));
   aio_write->aio_fildes = w->fd;
   aio_write->aio_notifytype = AIO_MSGQ;
-  aio_write->aio_cflags = AIO_OK2COMPIMD;
+  aio_write->aio_cflags |= AIO_OK2COMPIMD;
   aio_write->aio_cmd = cmd;
   aio_write->aio_msgev_qid = ep->msg_queue;
   aio_write->aio_buf = buf;

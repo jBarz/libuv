@@ -1034,7 +1034,6 @@ static int os390_message_queue_handler(void* ptr) {
 
 
 void uv__io_poll(uv_loop_t* loop, int timeout) {
-  static const int max_safe_timeout = 1789569;
   struct epoll_event events[1024];
   union {
     long int type;
@@ -1044,11 +1043,11 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       struct aiocb* aio;
     } aiomsg;
   } msg;
-  int handled_synchronous_event;
   struct epoll_event* pe;
   struct epoll_event e;
   uv__os390_epoll* ep;
   int real_timeout;
+  QUEUE aioq;
   QUEUE* q;
   uv__io_t* w;
   uint64_t base;
@@ -1064,7 +1063,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   }
 
   ep = loop->ep;
-  handled_synchronous_event = 0;
+  QUEUE_INIT(&aioq);
   while (!QUEUE_EMPTY(&loop->watcher_queue)) {
     uv_stream_t* stream;
 
@@ -1084,41 +1083,8 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       /* Don't use epoll. The write and connect calls have already been
        * dispatched via BPX4AIO. Wait for them to pop up on message queue.
        */
+      QUEUE_INSERT_TAIL(&aioq, &w->watcher_queue);
 
-      if (w->pevents & POLLOUT) {
-        if (stream->connect_req != NULL) {
-          if (stream->connect_req->aio.aio_cmd != AIO_CONNECT) {
-            /* This is a connect event that had synchronous success. */
-            stream->connect_req->aio.aio_cmd = AIO_CONNECT;
-            msg.aiomsg.type = SIGIO;
-            msg.aiomsg.aio = &stream->connect_req->aio;
-            if (os390_message_queue_handler(&msg) == 0)
-              handled_synchronous_event = 1;
-          }
-        }
-
-        /* This is a shutdown request waiting to be dispatched. */
-        if (stream->shutdown_req != NULL && QUEUE_EMPTY(&stream->write_queue)) {
-          stream->shutdown_req->aio.aio_cmd = AIO_WRITE;
-          msg.aiomsg.type = SIGIO;
-          msg.aiomsg.aio = &stream->shutdown_req->aio;
-          if (os390_message_queue_handler(&msg) == 0)
-            handled_synchronous_event = 1;
-        }
-      }
-
-      if (w->pevents & POLLIN) {
-        /* This is a read request weaiting to be dispatched. */
-        w->aio.aio_cmd = stream->flags & UV_STREAM_READING ? AIO_READ : AIO_ACCEPT;
-        w->aio.aio_fildes = w->fd;
-        w->aio.aio_notifytype = AIO_MSGQ;
-        w->aio.aio_msgev_qid = ep->msg_queue;
-
-        msg.aiomsg.type = SIGIO;
-        msg.aiomsg.aio = &w->aio;
-        if (os390_message_queue_handler(&msg) == 0)
-          handled_synchronous_event = 1;
-      }
     } else {
       /* Register this event to be polled. */
       e.events = w->pevents;
@@ -1152,23 +1118,75 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   count = 48; /* Benchmarks suggest this gives the best throughput. */
   real_timeout = timeout;
   int nevents = 0;
+  int interrupted;
 
   nfds = 0;
   for (;;) {
-    if (sizeof(int32_t) == sizeof(long) && timeout >= max_safe_timeout)
-      timeout = max_safe_timeout;
 
-    if (handled_synchronous_event && timeout == -1)
-      timeout = 0;
+    interrupted = 0;
+    if (!QUEUE_EMPTY(&aioq)) {
+     
+      interrupted = 1;
+      while (!QUEUE_EMPTY(&aioq)) {
+        uv_stream_t* stream;
+
+        q = QUEUE_HEAD(&aioq);
+        QUEUE_REMOVE(q);
+        QUEUE_INIT(q);
+        w = QUEUE_DATA(q, uv__io_t, watcher_queue);
+        stream = container_of(w, uv_stream_t, io_watcher);
+
+        if (w->pevents & POLLOUT) {
+          if (stream->connect_req != NULL) {
+            if (stream->connect_req->aio.aio_cmd != AIO_CONNECT) {
+              /* This is a connect event that had synchronous success. */
+              stream->connect_req->aio.aio_cmd = AIO_CONNECT;
+              msg.aiomsg.type = SIGIO;
+              msg.aiomsg.aio = &stream->connect_req->aio;
+              if (os390_message_queue_handler(&msg) == 0)
+                ++nevents;
+            }
+          }
+
+          /* This is a shutdown request waiting to be dispatched. */
+          if (stream->shutdown_req != NULL && QUEUE_EMPTY(&stream->write_queue)) {
+            stream->shutdown_req->aio.aio_cmd = AIO_WRITE;
+            msg.aiomsg.type = SIGIO;
+            msg.aiomsg.aio = &stream->shutdown_req->aio;
+            if (os390_message_queue_handler(&msg) == 0)
+              ++nevents;
+          }
+        }
+
+        if (w->pevents & POLLIN) {
+          /* This is a read request weaiting to be dispatched. */
+          w->aio.aio_cmd = stream->flags & UV_STREAM_READING ? AIO_READ : AIO_ACCEPT;
+          w->aio.aio_fildes = w->fd;
+          w->aio.aio_notifytype = AIO_MSGQ;
+          w->aio.aio_msgev_qid = ep->msg_queue;
+          msg.aiomsg.type = SIGIO;
+          msg.aiomsg.aio = &w->aio;
+          if (os390_message_queue_handler(&msg) == 0)
+            ++nevents;
+        }
+      }
+    }
+
+    /* We have acheived activity on a 0 timeout. Done. */
+    /* TODO: take this out when we implement selpol message and use msgrcv. */
+    if (timeout == 0 && interrupted)
+      return;
 
     nfds = epoll_wait(loop->ep, events,
-                      ARRAY_SIZE(events), timeout);
+                      ARRAY_SIZE(events), timeout == -1 && interrupted ? 0 : timeout);
+    if (nfds == -1 && errno == EINTR)
+      interrupted = 1;
 
     /* Update loop->time unconditionally. It's tempting to skip the update when
      * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
      * operating system didn't reschedule our process while in the syscall.
      */
-    SAVE_ERRNO(uv__update_time(loop));
+    uv__update_time(loop);
     if (nfds == 0) {
       assert(timeout != -1);
 
@@ -1185,7 +1203,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
     if (nfds == -1) {
 
       /* Error from poll. */
-      if (errno != EINTR)
+      if (!interrupted)
         abort();
 
       /* Signal interruption during indefinite wait. */

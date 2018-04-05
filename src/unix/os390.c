@@ -1034,7 +1034,7 @@ static int os390_message_queue_handler(void* ptr) {
 
 
 void uv__io_poll(uv_loop_t* loop, int timeout) {
-  struct epoll_event events[1024];
+  struct epoll_event events[128];
   union {
     long int type;
     _RFIM rfim;
@@ -1230,6 +1230,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         continue;
 
       if (fd == ep->msg_queue) {
+        int nmsgs;
         union {
           long int type;
           _RFIM rfim;
@@ -1237,17 +1238,19 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
             long int type;
             struct aiocb* aio;
           } aiomsg;
-        } msg;
+        } msgs[8192 * 2];
 
+        nmsgs = 0;
         for (;;) {
-          int msglen = msgrcv(ep->msg_queue, &msg, sizeof(msg), 0, IPC_NOWAIT);
-          if (msglen == -1 && errno == ENOMSG)
-            break;
-          if (msglen == -1)
+          int msglen = msgrcv(ep->msg_queue, &msgs[nmsgs], sizeof(msgs[nmsgs]), 0, IPC_NOWAIT);
+          if (msglen == -1 && errno != ENOMSG)
             abort();
-          if (os390_message_queue_handler(&msg) == 0)
-            ++nevents;
+          if (msglen == -1 || ++nmsgs >= ARRAY_SIZE(msgs))
+            break;
         }
+        for (int i = 0; i < nmsgs; ++i)
+          if (os390_message_queue_handler(&msgs[i]) == 0)
+            ++nevents;
 
       } else {
         assert(fd >= 0);

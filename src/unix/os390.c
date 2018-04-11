@@ -1350,6 +1350,7 @@ int uv__os390_connect(uv_connect_t* req, uv_stream_t* handle,
   aio_connect->aio_fildes = w->fd;
   aio_connect->aio_notifytype = AIO_MSGQ;
   aio_connect->aio_cflags |= AIO_OK2COMPIMD;
+  aio_connect->aio_cflags |= AIO_TCBAFFINITY;
   aio_connect->aio_cmd = AIO_CONNECT;
   aio_connect->aio_msgev_qid = ep->msg_queue;
 
@@ -1403,6 +1404,7 @@ int uv__os390_accept(uv_stream_t *handle) {
   }
 
   aio_accept->aio_cflags |= AIO_OK2COMPIMD;
+  aio_accept->aio_cflags |= AIO_TCBAFFINITY;
   BPX4AIO(sizeof(*aio_accept), aio_accept, &rv, &rc, &rsn);
   if (rv == -1) {
     /* Error. */
@@ -1454,6 +1456,7 @@ int uv__os390_read(uv_stream_t* handle, void* buf, int len) {
   aio_read->aio_buf = buf;
   aio_read->aio_nbytes = len;
   aio_read->aio_cflags |= AIO_OK2COMPIMD;
+  aio_read->aio_cflags |= AIO_TCBAFFINITY;
   BPX4AIO(sizeof(*aio_read), aio_read, &rv, &rc, &rsn);
 
   if (rv != 0) {
@@ -1507,6 +1510,7 @@ static int os390_write(int cmd, uv_write_t* req,
   aio_write->aio_fildes = w->fd;
   aio_write->aio_notifytype = AIO_MSGQ;
   aio_write->aio_cflags |= AIO_OK2COMPIMD;
+  aio_write->aio_cflags |= AIO_TCBAFFINITY;
   aio_write->aio_cmd = cmd;
   aio_write->aio_msgev_qid = ep->msg_queue;
   aio_write->aio_buf = buf;

@@ -1000,7 +1000,7 @@ static int aio_write_message(struct aiocb* aio) {
 }
 
 
-static int os390_message_queue_handler(void* ptr) {
+static int message_handler(void* ptr) {
   union msgtype {
     long int type;
     _RFIM rfim;
@@ -1030,6 +1030,37 @@ static int os390_message_queue_handler(void* ptr) {
     /* File interest event */
     return fs_event_message(&msg->rfim);
   }
+}
+
+
+static int process_message_queue(uv__os390_epoll* ep, int nlimit) {
+  int nevents;
+  int msglen;
+  int nmsgs;
+  union {
+    long int type;
+    _RFIM rfim;
+    struct {
+      long int type;
+      struct aiocb* aio;
+    } aiomsg;
+  } msgs[nlimit];
+
+  nmsgs = 0;
+  for (;;) {
+    msglen = msgrcv(ep->msg_queue, &msgs[nmsgs], sizeof(msgs[nmsgs]), 0, IPC_NOWAIT);
+    if (msglen == -1 && errno != ENOMSG)
+      abort();
+    if (msglen == -1 || ++nmsgs >= ARRAY_SIZE(msgs))
+      break;
+  }
+
+  nevents = 0;
+  for (int i = 0; i < nmsgs; ++i)
+    if (message_handler(&msgs[i]) == 0)
+      ++nevents;
+
+  return nevents;
 }
 
 
@@ -1143,7 +1174,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
               stream->connect_req->aio.aio_cmd = AIO_CONNECT;
               msg.aiomsg.type = SIGIO;
               msg.aiomsg.aio = &stream->connect_req->aio;
-              if (os390_message_queue_handler(&msg) == 0)
+              if (message_handler(&msg) == 0)
                 ++nevents;
             }
           }
@@ -1153,7 +1184,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
             stream->shutdown_req->aio.aio_cmd = AIO_WRITE;
             msg.aiomsg.type = SIGIO;
             msg.aiomsg.aio = &stream->shutdown_req->aio;
-            if (os390_message_queue_handler(&msg) == 0)
+            if (message_handler(&msg) == 0)
               ++nevents;
           }
         }
@@ -1166,11 +1197,14 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
           w->aio.aio_msgev_qid = ep->msg_queue;
           msg.aiomsg.type = SIGIO;
           msg.aiomsg.aio = &w->aio;
-          if (os390_message_queue_handler(&msg) == 0)
+          if (message_handler(&msg) == 0)
             ++nevents;
         }
       }
     }
+
+    if (process_message_queue(ep, 8192 *4) > 0)
+      interrupted = 1;
 
     /* We have acheived activity on a 0 timeout. Done. */
     /* TODO: take this out when we implement selpol message and use msgrcv. */
@@ -1230,28 +1264,7 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
         continue;
 
       if (fd == ep->msg_queue) {
-        int nmsgs;
-        union {
-          long int type;
-          _RFIM rfim;
-          struct {
-            long int type;
-            struct aiocb* aio;
-          } aiomsg;
-        } msgs[8192 * 2];
-
-        nmsgs = 0;
-        for (;;) {
-          int msglen = msgrcv(ep->msg_queue, &msgs[nmsgs], sizeof(msgs[nmsgs]), 0, IPC_NOWAIT);
-          if (msglen == -1 && errno != ENOMSG)
-            abort();
-          if (msglen == -1 || ++nmsgs >= ARRAY_SIZE(msgs))
-            break;
-        }
-        for (int i = 0; i < nmsgs; ++i)
-          if (os390_message_queue_handler(&msgs[i]) == 0)
-            ++nevents;
-
+        nevents += process_message_queue(ep, 1024);
       } else {
         assert(fd >= 0);
         assert((unsigned) fd < loop->nwatchers);

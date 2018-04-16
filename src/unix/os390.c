@@ -1049,6 +1049,8 @@ static int process_message_queue(uv__os390_epoll* ep, int nlimit) {
   nmsgs = 0;
   for (;;) {
     msglen = msgrcv(ep->msg_queue, &msgs[nmsgs], sizeof(msgs[nmsgs]), 0, IPC_NOWAIT);
+    if (msglen == -1 && errno == EINTR)
+      break;
     if (msglen == -1 && errno != ENOMSG)
       abort();
     if (msglen == -1 || ++nmsgs >= ARRAY_SIZE(msgs))
@@ -1203,16 +1205,18 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       }
     }
 
-    if (process_message_queue(ep, 8192 *4) > 0)
-      interrupted = 1;
-
-    /* We have acheived activity on a 0 timeout. Done. */
-    /* TODO: take this out when we implement selpol message and use msgrcv. */
-    if (timeout == 0 && interrupted)
+    /* We have acheived activity on indefinite timeout. Done. */
+    if (timeout == -1 && nevents > 0)
       return;
 
-    nfds = epoll_wait(loop->ep, events,
-                      ARRAY_SIZE(events), timeout == -1 && interrupted ? 0 : timeout);
+    /* Drain message queue before polling. */
+    nevents += process_message_queue(ep, 8192 * 4);
+
+    /* We have acheived activity on indefinite timeout. Done. */
+    if (timeout == -1 && nevents > 0)
+      return;
+
+    nfds = epoll_wait(loop->ep, events, ARRAY_SIZE(events), timeout);
     if (nfds == -1 && errno == EINTR)
       interrupted = 1;
 
